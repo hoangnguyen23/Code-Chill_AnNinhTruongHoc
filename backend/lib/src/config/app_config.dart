@@ -170,45 +170,12 @@ class AppConfig {
 
     final projectId = requireKey('FIREBASE_PROJECT_ID', 'Project ID của Firebase.');
 
-    // Zalo là tuỳ chọn: chỉ bắt buộc đủ bộ khi đã điền ít nhất một biến Zalo.
-    final zaloEnabled = ['ZALO_APP_ID', 'ZALO_SECRET_KEY', 'ZALO_REFRESH_TOKEN'].any((k) => read(k) != null);
-    var appId = '';
-    var secret = '';
-    var refresh = '';
-    ZnsMode? mode = ZnsMode.development;
+    // Bỏ qua Zalo hoàn toàn, chỉ dùng FCM và Email OTP.
+    const appId = '';
+    const secret = '';
+    const refresh = '';
+    const mode = ZnsMode.development;
     final templateIds = <ZaloTemplateKey, String>{};
-    if (!zaloEnabled) {
-      warnings.add('Chưa cấu hình Zalo (ZALO_APP_ID...): tin báo cáo chỉ gửi qua thông báo đẩy trong app.');
-    } else {
-      appId = requireKey('ZALO_APP_ID', 'ID ứng dụng trên developers.zalo.me.');
-      if (appId.isNotEmpty && !RegExp(r'^\d+$').hasMatch(appId)) {
-        problems.add('ZALO_APP_ID chỉ gồm chữ số.');
-      }
-      secret = requireKey('ZALO_SECRET_KEY', 'Khoá bí mật của ứng dụng Zalo.');
-      refresh = requireKey(
-        'ZALO_REFRESH_TOKEN',
-        'Refresh token của OA (lấy bằng API Explorer hoặc OAuth v4, xem README).',
-      );
-
-      final modeRaw = read('ZALO_ZNS_MODE');
-      mode = ZnsMode.tryParse(modeRaw);
-      if (mode == null) {
-        problems.add('ZALO_ZNS_MODE phải là "development" hoặc "production" (đang là "${modeRaw ?? ''}").');
-      }
-    }
-
-    for (final key in ZaloTemplateKey.values) {
-      // Mã OTP gửi qua email, không cần template OTP của Zalo.
-      if (!zaloEnabled || key == ZaloTemplateKey.otp) continue;
-      final id = read(key.envVar);
-      if (id == null) {
-        warnings.add('Chưa cấu hình ${key.envVar}: tin "${key.title}" sẽ không gửi được.');
-      } else if (!RegExp(r'^[A-Za-z0-9]+$').hasMatch(id)) {
-        problems.add('${key.envVar} chỉ gồm chữ và số (đang là "$id").');
-      } else {
-        templateIds[key] = id;
-      }
-    }
 
     final pepper = requireKey('OTP_PEPPER', 'Chuỗi bí mật >= 32 ký tự để băm OTP.');
     if (pepper.isNotEmpty && pepper.length < 32) {
@@ -240,9 +207,9 @@ class AppConfig {
       serviceAccountPath: read('GOOGLE_APPLICATION_CREDENTIALS'),
       zaloAppId: appId,
       zaloSecretKey: secret,
-      zaloSeedAccessToken: read('ZALO_ACCESS_TOKEN'),
+      zaloSeedAccessToken: null,
       zaloSeedRefreshToken: refresh,
-      znsMode: mode ?? ZnsMode.development,
+      znsMode: mode,
       templateIds: templateIds,
       otpPepper: pepper,
       smtpHost: read('SMTP_HOST') ?? 'smtp.gmail.com',
