@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "871690667294",
+    "project_id": "sms-otp-26e31",
+    "storage_bucket": "sms-otp-26e31.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:871690667294:android:c4c6bd4112a3854532750f",
+        "android_client_info": {
+          "package_name": "com.example.sms_otp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBsaatk3SOIdM8RVMvfuUvEAq2h_44VRE8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:871690667294:android:df828a79788bfe0d32750f",
+        "android_client_info": {
+          "package_name": "vn.edu.antoan.campus_safety"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBsaatk3SOIdM8RVMvfuUvEAq2h_44VRE8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

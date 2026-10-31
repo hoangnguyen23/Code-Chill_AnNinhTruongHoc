@@ -1,0 +1,37 @@
+rules_version = '2';
+
+// Ảnh sự cố: app nén ảnh (JPEG, cạnh dài <= 1600px) rồi tải lên incident_images/{yyyyMM}/{id}.jpg,
+// gắn metadata uploaderUid. Đường dẫn không chứa uid để không lộ người báo ẩn danh.
+// Rules đọc vai trò từ Firestore (cross-service rules): lần deploy đầu, Firebase CLI sẽ hỏi
+// cấp quyền cho Storage đọc Firestore, hãy đồng ý.
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function profile() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isActive() {
+      return request.auth != null && profile().active == true;
+    }
+
+    function isStaff() {
+      return isActive() && profile().role in ['guard', 'admin'];
+    }
+
+    match /incident_images/{month}/{fileName} {
+      allow create: if isActive()
+        && month.matches('^[0-9]{6}$')
+        && fileName.matches('^[A-Za-z0-9_-]{8,64}\\.(jpg|png|webp)$')
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png|webp)')
+        && request.resource.metadata.uploaderUid == request.auth.uid;
+
+      allow read: if isStaff()
+        || (isActive() && resource.metadata.uploaderUid == request.auth.uid);
+
+      // Bằng chứng không được sửa/xoá từ app.
+      allow update, delete: if false;
+    }
+  }
+}

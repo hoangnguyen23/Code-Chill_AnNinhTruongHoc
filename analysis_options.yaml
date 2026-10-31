@@ -1,0 +1,16 @@
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - build/**
+    # backend và package dùng chung có analysis_options riêng (chạy `dart analyze` trong thư mục đó).
+    - backend/**
+    - packages/**
+    - android/**
+
+linter:
+  rules:
+    prefer_single_quotes: true
+    always_declare_return_types: true
+    prefer_final_locals: true
+    unawaited_futures: true

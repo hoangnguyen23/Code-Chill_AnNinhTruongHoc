@@ -1,0 +1,95 @@
+rules_version = '2';
+
+// Firestore Rules cho app "Báo cáo sự cố an ninh trong trường".
+//
+// Nguyên tắc:
+// - Client CHỈ ĐỌC. Mọi thao tác ghi (tạo báo cáo, đổi trạng thái, phân công, trao đổi, hồ sơ,
+//   cấu hình) đi qua backend dart_frog dùng Admin SDK, để kiểm tra quyền và gửi Zalo/FCM nhất quán.
+// - Vai trò lấy từ users/{uid}.role (reporter | guard | admin), đổi vai trò có hiệu lực ngay.
+// - Báo cáo ẩn danh: reports/{id} KHÔNG chứa tên/số người báo; thông tin thật ở
+//   reports/{id}/private/reporter, chỉ quản trị và chính người báo đọc được. Bảo vệ không đọc được.
+// - otp_challenges, email_index, system (token Zalo) không có rule nào => client bị chặn hoàn toàn.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function profile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isActive() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && profile().active == true;
+    }
+
+    function isStaff() {
+      return isActive() && profile().role in ['guard', 'admin'];
+    }
+
+    function isAdmin() {
+      return isActive() && profile().role == 'admin';
+    }
+
+    // Người đang đăng nhập là người báo của báo cáo này (kể cả khi ẩn danh).
+    function ownsReport(reportId) {
+      return isActive()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid)/reports/$(reportId));
+    }
+
+    match /users/{uid} {
+      // Chính chủ đọc được hồ sơ kể cả khi bị khoá, để app báo đúng "Tài khoản đã bị khoá".
+      allow get: if signedIn() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow write: if false;
+
+      // Chỉ mục "Báo cáo của tôi".
+      match /reports/{reportId} {
+        allow read: if isActive() && request.auth.uid == uid;
+        allow write: if false;
+      }
+    }
+
+    match /reports/{reportId} {
+      allow get: if isStaff() || ownsReport(reportId);
+      allow list: if isStaff();
+      allow write: if false;
+
+      match /events/{eventId} {
+        allow read: if isStaff() || ownsReport(reportId);
+        allow write: if false;
+      }
+
+      match /private/{docId} {
+        allow read: if isAdmin() || (isActive() && resource.data.uid == request.auth.uid);
+        allow write: if false;
+      }
+    }
+
+    match /config/{docId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    // Cảnh báo toàn trường: mọi tài khoản đang hoạt động đọc được, chỉ backend ghi.
+    match /broadcasts/{broadcastId} {
+      allow read: if isActive();
+      allow write: if false;
+    }
+
+    // "Đi cùng tôi": chính chủ và bảo vệ/quản trị đọc được, chỉ backend ghi.
+    match /walks/{walkId} {
+      allow read: if isStaff() || (isActive() && resource.data.uid == request.auth.uid);
+      allow write: if false;
+    }
+
+    // Nhật ký gửi tin Zalo.
+    match /zalo_logs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+  }
+}
