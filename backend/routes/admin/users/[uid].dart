@@ -40,7 +40,7 @@ Future<Response> onRequest(RequestContext context, String uid) async {
       ((role != null && role != UserRole.admin) || active == false)) {
     throw ApiException.forbidden('Đây là tài khoản quản trị gốc, không thể khoá hay hạ quyền.');
   }
-  if (role != null && !role.isStaff && (onDuty ?? false)) {
+  if (!(role ?? target.role).isStaff && (onDuty ?? false)) {
     throw ApiException.validation({'onDuty': 'Chỉ bảo vệ hoặc quản trị mới có trạng thái trực.'});
   }
 

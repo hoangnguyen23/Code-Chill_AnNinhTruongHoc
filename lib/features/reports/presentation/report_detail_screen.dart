@@ -30,7 +30,7 @@ class ReportDetailScreen extends ConsumerWidget {
       loading: () => Scaffold(appBar: AppBar(title: const Text('Báo cáo')), body: const SkeletonList(count: 3)),
       error: (e, _) => Scaffold(
         appBar: AppBar(title: const Text('Báo cáo')),
-        body: ErrorState(error: e, onRetry: () => ref.invalidate(reportProvider(reportId))),
+        body: ErrorState(error: e, onRetry: () => ref.invalidate(reportDetailProvider(reportId))),
       ),
       data: (r) {
         if (r == null || user == null) {
@@ -79,13 +79,6 @@ class _ReportDetailViewState extends ConsumerState<_ReportDetailView> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  String _zaloNote(ZaloDelivery? d) {
-    if (d == null) return '';
-    return d.success
-        ? ' Đã gửi Zalo cho người báo.'
-        : ' Chưa gửi được Zalo cho người báo: ${d.message ?? 'lỗi không rõ'}';
-  }
-
   Future<void> _changeStatus(ReportStatus to) async {
     final note = await showModalBottomSheet<String>(
       context: context,
@@ -95,8 +88,8 @@ class _ReportDetailViewState extends ConsumerState<_ReportDetailView> {
     if (note == null) return;
     setState(() => _busy = true);
     try {
-      final zalo = await ref.read(reportRepositoryProvider).changeStatus(r.id, to, note: note);
-      _toast('Đã chuyển sang "${to.label}".${_zaloNote(zalo)}');
+      await ref.read(reportRepositoryProvider).changeStatus(r.id, to, note: note);
+      _toast('Đã chuyển sang "${to.label}".');
     } on ApiError catch (e) {
       _toast(e.message);
     } finally {
@@ -107,8 +100,8 @@ class _ReportDetailViewState extends ConsumerState<_ReportDetailView> {
   Future<void> _assign(String uid) async {
     setState(() => _busy = true);
     try {
-      final zalo = await ref.read(reportRepositoryProvider).assign(r.id, uid);
-      _toast('Đã phân công.${_zaloNote(zalo)}');
+      await ref.read(reportRepositoryProvider).assign(r.id, uid);
+      _toast('Đã phân công.');
     } on ApiError catch (e) {
       _toast(e.message);
     } finally {

@@ -1,6 +1,6 @@
 import 'package:campus_core/campus_core.dart';
 
-/// Hồ sơ người dùng (Firestore `users/{uid}`).
+/// Hồ sơ người dùng.
 class AppUser {
   const AppUser({
     required this.uid,
@@ -13,18 +13,6 @@ class AppUser {
     required this.active,
     required this.onDuty,
   });
-
-  factory AppUser.fromMap(String uid, Map<String, dynamic> d) => AppUser(
-        uid: uid,
-        email: (d['email'] as String?) ?? '',
-        username: (d['username'] as String?) ?? '',
-        phone: (d['phoneLocal'] as String?) ?? VietnamPhone.tryParse(d['phone'] as String?)?.local ?? '',
-        displayName: (d['displayName'] as String?) ?? '',
-        role: UserRole.fromWire(d['role'] as String?),
-        memberType: MemberType.fromWire(d['memberType'] as String?),
-        active: d['active'] != false,
-        onDuty: d['onDuty'] == true,
-      );
 
   /// Từ JSON `user` trả về bởi backend (`/me`, `/auth/otp/verify`).
   factory AppUser.fromApi(Map<String, Object?> j) => AppUser(

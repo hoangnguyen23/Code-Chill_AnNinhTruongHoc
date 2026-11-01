@@ -24,6 +24,16 @@ class InvalidIdTokenException implements Exception {
   String toString() => 'InvalidIdTokenException: $reason';
 }
 
+/// Không kiểm tra được token vì mất kết nối tới Firebase Auth (không phải token sai).
+class AuthUnavailableException implements Exception {
+  AuthUnavailableException(this.reason);
+
+  final String reason;
+
+  @override
+  String toString() => 'AuthUnavailableException: $reason';
+}
+
 class FirebaseAuthTokenService implements AuthTokenService {
   FirebaseAuthTokenService(this._auth);
 
@@ -40,8 +50,12 @@ class FirebaseAuthTokenService implements AuthTokenService {
       // không đợi ID token hết hạn sau 1 giờ.
       final decoded = await _auth.verifyIdToken(idToken, checkRevoked: true);
       return decoded.uid;
-    } on Object catch (e) {
+    } on admin.FirebaseAuthAdminException catch (e) {
+      if (e.errorCode == admin.AuthClientErrorCode.internalError) throw AuthUnavailableException(e.toString());
       throw InvalidIdTokenException(e.toString());
+    } on Object catch (e) {
+      // SocketException, ClientException, hết giờ...: mạng chập chờn, không đăng xuất người dùng.
+      throw AuthUnavailableException(e.toString());
     }
   }
 

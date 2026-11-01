@@ -172,16 +172,17 @@ class AccountService {
       throw ApiException.validation({'username': 'Tên đăng nhập này đã có người dùng. Chọn tên khác.'});
     }
 
+    // Chặn trước khi băm: băm mật khẩu tốn CPU, không để gửi hàng loạt làm nghẽn máy chủ.
+    _limitSends(ip);
     return _sendCode(
       email,
-      ip: ip,
       action: 'đăng ký tài khoản',
       pending: {
         'purpose': 'register',
         'username': username,
         'displayName': name,
         'memberType': memberType!.wire,
-        'passwordHash': _hasher.hash(input.password),
+        'passwordHash': await _hasher.hashAsync(input.password),
       },
     );
   }
@@ -239,7 +240,8 @@ class AccountService {
     if (!user.active) {
       throw ApiException.forbidden('Tài khoản này đã bị khoá. Liên hệ quản trị để được hỗ trợ.');
     }
-    return _sendCode(email, ip: ip, action: 'đặt lại mật khẩu', pending: {'purpose': 'reset', 'uid': user.uid});
+    _limitSends(ip);
+    return _sendCode(email, action: 'đặt lại mật khẩu', pending: {'purpose': 'reset', 'uid': user.uid});
   }
 
   /// Nhập đúng mã thì đặt mật khẩu mới (mở khoá đăng nhập nếu đang bị khoá) và đăng nhập luôn.
@@ -253,7 +255,7 @@ class AccountService {
       throw ApiException.badRequest('Tài khoản không còn tồn tại.', code: 'account_missing');
     }
     if (!user.active) throw ApiException.forbidden('Tài khoản này đã bị khoá. Liên hệ quản trị để được hỗ trợ.');
-    await _credentials.updatePassword(user.uid, _hasher.hash(newPassword));
+    await _credentials.updatePassword(user.uid, await _hasher.hashAsync(newPassword));
     // Đăng xuất các máy đang dùng mật khẩu cũ.
     await _auth.revokeSessions(user.uid);
     final updated = await _users.update(user.uid, lastLoginAt: _clock().toUtc());
@@ -263,21 +265,25 @@ class AccountService {
 
   // ---------------------------------------------------------------- Đổi mật khẩu
 
-  /// Người dùng đang đăng nhập đổi mật khẩu: phải nhập đúng mật khẩu hiện tại.
-  Future<void> changePassword(UserRecord user, String currentPassword, String newPassword) async {
+  /// Người dùng đang đăng nhập đổi mật khẩu: phải nhập đúng mật khẩu hiện tại. Các máy khác bị đăng
+  /// xuất (phòng trường hợp lộ mật khẩu); máy đang dùng nhận phiên mới qua custom token trả về.
+  Future<SignInResult> changePassword(UserRecord user, String currentPassword, String newPassword) async {
     final cred = await _credentials.byUid(user.uid);
     if (cred == null) {
       throw ApiException.badRequest('Tài khoản chưa có mật khẩu. Hãy dùng "Quên mật khẩu".', code: 'no_password');
     }
     final error = PasswordPolicy.validate(newPassword);
     if (error != null) throw ApiException.validation({'newPassword': error});
-    if (!_hasher.verify(currentPassword, cred.passwordHash)) {
+    if (!await _hasher.verifyAsync(currentPassword, cred.passwordHash)) {
       throw ApiException.validation({'currentPassword': 'Mật khẩu hiện tại không đúng.'});
     }
     if (currentPassword == newPassword) {
       throw ApiException.validation({'newPassword': 'Mật khẩu mới phải khác mật khẩu hiện tại.'});
     }
-    await _credentials.updatePassword(user.uid, _hasher.hash(newPassword));
+    await _credentials.updatePassword(user.uid, await _hasher.hashAsync(newPassword));
+    await _auth.revokeSessions(user.uid);
+    final token = await _auth.createCustomToken(user.uid, claims: {'role': user.role.wire});
+    return SignInResult(customToken: token, user: user, isNewUser: false);
   }
 
   // ---------------------------------------------------------------- Xoá tài khoản
@@ -327,7 +333,7 @@ class AccountService {
     }
     if (cred == null) {
       // Vẫn băm để thời gian phản hồi không lộ tên đăng nhập có tồn tại hay không.
-      _hasher.verify(password, _dummyHash);
+      await _hasher.verifyAsync(password, await _dummyHash);
       throw ApiException(HttpStatus.unauthorized, 'invalid_credentials', _invalidLogin);
     }
 
@@ -341,7 +347,7 @@ class AccountService {
       );
     }
 
-    if (!_hasher.verify(password, cred.passwordHash)) {
+    if (!await _hasher.verifyAsync(password, cred.passwordHash)) {
       final attempts = (locked != null ? 0 : cred.failedAttempts) + 1;
       if (attempts >= LoginPolicy.maxFailures) {
         await _credentials.recordFailure(cred.uid, attempts: 0, lockedUntil: now.add(LoginPolicy.lockDuration));
@@ -372,16 +378,11 @@ class AccountService {
     return SignInResult(customToken: token, user: updated, isNewUser: false);
   }
 
-  late final String _dummyHash = _hasher.hash('khong-phai-mat-khau-1');
+  late final Future<String> _dummyHash = _hasher.hashAsync('khong-phai-mat-khau-1');
 
   // ---------------------------------------------------------------- OTP
 
-  Future<OtpRequestResult> _sendCode(
-    EmailAddress email, {
-    required String ip,
-    required String action,
-    required Map<String, String> pending,
-  }) async {
+  void _limitSends(String ip) {
     final ipWait = _ipSend.hit(ip);
     if (ipWait != null) {
       throw ApiException.tooManyRequests(
@@ -389,6 +390,13 @@ class AccountService {
         retryAfter: ipWait,
       );
     }
+  }
+
+  Future<OtpRequestResult> _sendCode(
+    EmailAddress email, {
+    required String action,
+    required Map<String, String> pending,
+  }) async {
     final now = _clock().toUtc();
     final code = _random.nextInt(1000000).toString().padLeft(OtpPolicy.codeLength, '0');
     final salt = _randomHex(16);

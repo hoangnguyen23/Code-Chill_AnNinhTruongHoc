@@ -253,7 +253,13 @@ void main() {
     });
   });
 
-  test('băm mật khẩu: đúng chuẩn PBKDF2, muối khác nhau mỗi lần', () {
+  test('băm mật khẩu: đúng chuẩn PBKDF2, muối khác nhau mỗi lần', () async {
+    final slow = PasswordHasher(iterations: 1000);
+    final stored = await slow.hashAsync('matkhau123');
+    expect(await slow.verifyAsync('matkhau123', stored), isTrue);
+    expect(await slow.verifyAsync('matkhau124', stored), isFalse);
+    expect(slow.verify('matkhau123', stored), isTrue, reason: 'hai cách băm cho cùng định dạng');
+
     final h = PasswordHasher(iterations: 1000);
     final a = h.hash('matkhau123');
     expect(a, isNot(h.hash('matkhau123')));
@@ -367,6 +373,12 @@ void main() {
       svc = service();
       await svc.requestRegistration(input(), ip: 'r');
       me = (await svc.verifyRegistration(email, lastCode(), ip: 'r')).user;
+    });
+
+    test('đổi mật khẩu đăng xuất các máy khác, máy đang dùng nhận phiên mới', () async {
+      final result = await svc.changePassword(me, 'matkhau123', 'matkhaumoi9');
+      expect(auth.revoked, contains(me.uid));
+      expect(result.customToken, isNotEmpty);
     });
 
     test('đúng mật khẩu hiện tại thì đổi được', () async {

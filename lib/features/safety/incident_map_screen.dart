@@ -144,10 +144,13 @@ class _IncidentMapScreenState extends ConsumerState<IncidentMapScreen> {
                     interactionOptions: InteractionOptions(flags: InteractiveFlag.all & ~InteractiveFlag.rotate),
                   ),
                   children: [
+                    // tile.openstreetmap.org không kết nối được từ nhiều mạng ở Việt Nam, nền bản đồ sẽ xám.
                     TileLayer(
-                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      urlTemplate: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+                      subdomains: const ['a', 'b', 'c', 'd'],
+                      retinaMode: RetinaMode.isHighDensity(context),
                       userAgentPackageName: 'vn.edu.antoan.campus_safety',
-                      maxZoom: 19,
+                      maxZoom: 20,
                     ),
                     MarkerLayer(
                       markers: [
@@ -174,6 +177,10 @@ class _IncidentMapScreenState extends ConsumerState<IncidentMapScreen> {
                         TextSourceAttribution(
                           'OpenStreetMap contributors',
                           onTap: () => launchUrl(Uri.parse('https://openstreetmap.org/copyright')),
+                        ),
+                        TextSourceAttribution(
+                          'CARTO',
+                          onTap: () => launchUrl(Uri.parse('https://carto.com/attributions')),
                         ),
                       ],
                     ),

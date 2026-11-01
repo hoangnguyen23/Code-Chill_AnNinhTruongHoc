@@ -57,11 +57,6 @@ class ApiError implements Exception {
   bool get isNetwork => code == 'network' || code == 'timeout';
   bool get isUnauthorized => statusCode == 401;
 
-  /// Lỗi đến từ Zalo (mã `zalo_*`).
-  bool get isZalo => code.startsWith('zalo_');
-
-  int? get zaloErrorCode => details['zaloErrorCode'] as int?;
-
   @override
   String toString() => message;
 }

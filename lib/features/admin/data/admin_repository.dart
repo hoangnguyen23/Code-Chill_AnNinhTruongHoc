@@ -1,36 +1,26 @@
 import 'package:campus_core/campus_core.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/firebase/firebase_providers.dart';
 import '../../../core/network/api_client.dart';
+import '../../../core/network/polling.dart';
 import '../../auth/domain/app_user.dart';
 import '../../campus/campus_info.dart';
-import '../domain/admin_models.dart';
 
-/// Quản trị: đọc danh sách tài khoản và nhật ký từ Firestore (Rules chỉ cho quản trị đọc),
-/// mọi thao tác ghi đi qua backend.
+/// Quản trị quản lý tài khoản qua backend (`/admin/*` chỉ quản trị gọi được).
 class AdminRepository {
-  AdminRepository(this._db, this._api);
+  AdminRepository(this._api);
 
-  final FirebaseFirestore _db;
   final ApiClient _api;
 
-  List<AppUser> _users(QuerySnapshot<Map<String, dynamic>> s) {
-    final list = s.docs.map((d) => AppUser.fromMap(d.id, d.data())).toList()
-      ..sort((a, b) => a.nameOrEmail.toLowerCase().compareTo(b.nameOrEmail.toLowerCase()));
-    return list;
-  }
+  static List<AppUser> _users(Map<String, Object?> j) => [
+        for (final u in ((j['users'] as List?) ?? const []).whereType<Map>()) AppUser.fromApi(u.cast<String, Object?>()),
+      ]..sort((a, b) => a.nameOrEmail.toLowerCase().compareTo(b.nameOrEmail.toLowerCase()));
 
-  Stream<List<AppUser>> watchUsers(UserRole role) =>
-      _db.collection('users').where('role', isEqualTo: role.wire).limit(1000).snapshots().map(_users);
+  Stream<List<AppUser>> watchUsers(UserRole role) => pollApi(_api, '/admin/users?role=${role.wire}', _users);
 
   /// Bảo vệ và quản trị (để phân công).
-  Stream<List<AppUser>> watchStaff() => _db
-      .collection('users')
-      .where('role', whereIn: [UserRole.guard.wire, UserRole.admin.wire])
-      .snapshots()
-      .map(_users);
+  Stream<List<AppUser>> watchStaff() => pollApi(_api, '/admin/users', _users);
 
   Future<AppUser> createUser({
     required String email,
@@ -83,40 +73,10 @@ class AdminRepository {
       'buildings': buildings,
     });
   }
-
-  Future<ZaloStatus> zaloStatus() async => ZaloStatus.fromJson(await _api.get('/admin/zalo/status'));
-
-  Future<SendLogItem> testSend({
-    required String phone,
-    required String templateKey,
-    required Map<String, String> data,
-  }) async {
-    final res = await _api.post('/admin/zalo/test_send', {
-      'phone': phone,
-      'template': templateKey,
-      'data': data,
-    });
-    return SendLogItem.fromMap('', (res['result']! as Map).cast<String, dynamic>());
-  }
-
-  Future<ZaloTokenInfo> refreshZaloToken() async {
-    final res = await _api.post('/admin/zalo/refresh_token');
-    return ZaloTokenInfo.fromJson((res['token'] as Map?)?.cast<String, Object?>() ?? const {});
-  }
-
-  Stream<List<SendLogItem>> watchLogs({required bool failuresOnly}) {
-    Query<Map<String, dynamic>> q = _db.collection('zalo_logs');
-    if (failuresOnly) q = q.where('success', isEqualTo: false);
-    return q
-        .orderBy('createdAt', descending: true)
-        .limit(200)
-        .snapshots()
-        .map((s) => s.docs.map((d) => SendLogItem.fromMap(d.id, d.data())).toList());
-  }
 }
 
 final adminRepositoryProvider = Provider<AdminRepository>(
-  (ref) => AdminRepository(ref.watch(firestoreProvider), ref.watch(apiClientProvider)),
+  (ref) => AdminRepository(ref.watch(apiClientProvider)),
 );
 
 final usersByRoleProvider = StreamProvider.autoDispose.family<List<AppUser>, UserRole>(
@@ -124,12 +84,6 @@ final usersByRoleProvider = StreamProvider.autoDispose.family<List<AppUser>, Use
 );
 
 final staffProvider = StreamProvider.autoDispose<List<AppUser>>((ref) => ref.watch(adminRepositoryProvider).watchStaff());
-
-final zaloStatusProvider = FutureProvider.autoDispose<ZaloStatus>((ref) => ref.watch(adminRepositoryProvider).zaloStatus());
-
-final sendLogsProvider = StreamProvider.autoDispose.family<List<SendLogItem>, bool>(
-  (ref, failuresOnly) => ref.watch(adminRepositoryProvider).watchLogs(failuresOnly: failuresOnly),
-);
 
 /// Làm mới cấu hình trường sau khi quản trị sửa.
 void refreshCampus(WidgetRef ref) => ref.invalidate(campusInfoProvider);

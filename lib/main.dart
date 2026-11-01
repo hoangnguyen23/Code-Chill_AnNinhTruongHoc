@@ -1,4 +1,3 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -17,8 +16,6 @@ Future<void> main() async {
     runApp(FirebaseSetupErrorApp(error: e));
     return;
   }
-  // Dữ liệu đã tải vẫn xem được khi mất mạng.
-  FirebaseFirestore.instance.settings = const Settings(persistenceEnabled: true);
 
   // Tắt tự thử lại của Riverpod 3: màn hình có nút "Thử lại" rõ ràng.
   final container = ProviderContainer(retry: (_, _) => null);

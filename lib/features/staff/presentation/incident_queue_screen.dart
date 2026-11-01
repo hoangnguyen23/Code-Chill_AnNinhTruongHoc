@@ -405,7 +405,7 @@ class _OffDutyBannerState extends ConsumerState<_OffDutyBanner> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Bạn đang nghỉ ca. Bật "Đang trực" để được ưu tiên nhận việc khi có sự cố mới.',
+                    'Bạn đang nghỉ ca nên chỉ nhận thông báo sự cố khẩn cấp. Bật "Đang trực" để nhận mọi sự cố mới.',
                     style: textStyle,
                   ),
                 ),

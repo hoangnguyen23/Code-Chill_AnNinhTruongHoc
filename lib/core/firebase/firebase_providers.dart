@@ -1,15 +1,12 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/server_url.dart';
 import '../network/api_client.dart';
+import '../network/api_error.dart';
 
 final firebaseAuthProvider = Provider<FirebaseAuth>((ref) => FirebaseAuth.instance);
-
-final firestoreProvider = Provider<FirebaseFirestore>((ref) => FirebaseFirestore.instance);
-
 
 final messagingProvider = Provider<FirebaseMessaging>((ref) => FirebaseMessaging.instance);
 
@@ -20,6 +17,16 @@ final apiClientProvider = Provider<ApiClient>((ref) {
   final auth = ref.watch(firebaseAuthProvider);
   return ApiClient(
     baseUrl: ref.watch(serverUrlProvider),
-    idToken: () async => auth.currentUser?.getIdToken(),
+    idToken: () async {
+      try {
+        return await auth.currentUser?.getIdToken();
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'network-request-failed') throw ApiError.network();
+        // Phiên đã bị thu hồi hoặc tài khoản đã xoá: về màn đăng nhập.
+        await auth.signOut();
+        return null;
+      }
+    },
+    onSessionExpired: auth.signOut,
   );
 });

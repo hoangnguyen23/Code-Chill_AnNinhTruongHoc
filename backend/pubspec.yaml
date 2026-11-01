@@ -1,5 +1,5 @@
 name: campus_safety_backend
-description: Backend dart_frog cho app "Báo cáo sự cố an ninh trong trường". Giữ secret Zalo OA, cấp custom token Firebase, gửi Zalo ZBS Template Message (ZNS) và FCM.
+description: Backend dart_frog cho app "Báo cáo sự cố an ninh trong trường". Cấp custom token Firebase, gửi OTP qua email và thông báo đẩy FCM.
 version: 1.0.0
 publish_to: none
 
@@ -15,6 +15,7 @@ dependencies:
   dotenv: ^4.2.0
   http: ^1.6.0
   mailer: ^7.2.0
+  mongo_dart: ^0.10.10
 
 dev_dependencies:
   lints: ^6.0.0

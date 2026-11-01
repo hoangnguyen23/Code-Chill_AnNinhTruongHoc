@@ -2,23 +2,19 @@ import 'dart:io';
 
 import 'package:dart_firebase_admin/auth.dart' as fb_auth;
 import 'package:dart_firebase_admin/dart_firebase_admin.dart';
-import 'package:dart_firebase_admin/firestore.dart';
 import 'package:dart_firebase_admin/messaging.dart' as fb_messaging;
-import 'package:http/http.dart' as http;
 
 import 'auth/firebase_auth_service.dart';
 import 'auth/otp_mailer.dart';
 import 'auth/account_service.dart';
 import 'config/app_config.dart';
-import 'data/firestore_repositories.dart';
-import 'data/firestore_safety_repositories.dart';
 import 'data/models.dart';
+import 'data/mongo_repositories.dart';
+import 'data/mongo_safety_repositories.dart';
+import 'data/mongo_store.dart';
 import 'data/repositories.dart';
-import 'notifications/notification_gateway.dart';
 import 'notifications/notification_service.dart';
 import 'notifications/push_service.dart';
-import 'notifications/zalo/zalo_token_manager.dart';
-import 'notifications/zalo/zalo_zns_gateway.dart';
 import 'http/user_limits.dart';
 import 'reports/image_store.dart';
 import 'reports/report_service.dart';
@@ -34,8 +30,6 @@ class AppServices {
     required this.reports,
     required this.campusConfig,
     required this.authTokens,
-    required this.zaloTokens,
-    required this.gateway,
     required this.accounts,
     required this.reportService,
     required this.notifications,
@@ -50,9 +44,6 @@ class AppServices {
   final ReportRepository reports;
   final ConfigRepository campusConfig;
   final AuthTokenService authTokens;
-  /// `null` khi chưa cấu hình Zalo.
-  final ZaloTokenManager? zaloTokens;
-  final NotificationGateway gateway;
   final AccountService accounts;
   final ReportService reportService;
   final NotificationService notifications;
@@ -73,7 +64,7 @@ class AppServices {
 
   static set instance(AppServices value) => _instance = value;
 
-  /// Cấu hình trường hiện tại (Firestore `config/app`), rơi về giá trị trong .env và
+  /// Cấu hình trường hiện tại (MongoDB), rơi về giá trị trong .env và
   /// `config/campus.json` nếu chưa có.
   Future<CampusConfig> currentCampusConfig() async {
     final stored = await campusConfig.read();
@@ -85,8 +76,8 @@ class AppServices {
     );
   }
 
-  /// Kết nối Firebase Admin, máy chủ mail và Zalo (nếu có cấu hình) theo [config].
-  factory AppServices.production(AppConfig config) {
+  /// Kết nối MongoDB (CSDL chính), Firebase Admin (đăng nhập, thông báo đẩy) và mail theo [config].
+  static Future<AppServices> production(AppConfig config) async {
     final credentialPath = config.serviceAccountPath;
     final Credential credential;
     if (credentialPath != null) {
@@ -101,37 +92,15 @@ class AppServices {
       credential = Credential.fromApplicationDefaultCredentials();
     }
     final app = FirebaseAdminApp.initializeApp(config.firebaseProjectId, credential);
-    final firestore = Firestore(app);
-    final httpClient = http.Client();
+    final store = await MongoStore.connect(config.mongoUri);
 
-    final users = FirestoreUserRepository(firestore);
-    final reports = FirestoreReportRepository(firestore);
+    final users = MongoUserRepository(store);
+    final reports = MongoReportRepository(store);
     final authTokens = FirebaseAuthTokenService(fb_auth.Auth(app));
 
-    final zaloTokens = config.zaloEnabled
-        ? ZaloTokenManager(
-            client: httpClient,
-            store: FirestoreZaloTokenStore(firestore),
-            appId: config.zaloAppId,
-            secretKey: config.zaloSecretKey,
-            seedRefreshToken: config.zaloSeedRefreshToken,
-            seedAccessToken: config.zaloSeedAccessToken,
-          )
-        : null;
-    final NotificationGateway gateway = zaloTokens == null
-        ? const DisabledNotificationGateway()
-        : ZaloZnsGateway(
-            client: httpClient,
-            tokens: zaloTokens,
-            mode: config.znsMode,
-            templateIds: config.templateIds,
-            logs: FirestoreSendLogRepository(firestore),
-          );
     final notifications = NotificationService(
-      gateway: gateway,
       push: FcmPushService(fb_messaging.Messaging(app)),
       users: users,
-      extraDutyPhones: config.dutyGuardPhones,
     );
 
     final reportService = ReportService(reports: reports, users: users, notifications: notifications);
@@ -139,33 +108,38 @@ class AppServices {
       config: config,
       users: users,
       reports: reports,
-      campusConfig: FirestoreConfigRepository(firestore),
+      campusConfig: MongoConfigRepository(store),
       authTokens: authTokens,
-      zaloTokens: zaloTokens,
-      gateway: gateway,
       notifications: notifications,
       accounts: AccountService(
-        store: FirestoreOtpStore(firestore),
+        store: MongoOtpStore(store),
         users: users,
-        credentials: FirestoreCredentialRepository(firestore),
-        mailer: SmtpOtpMailer(
-          host: config.smtpHost,
-          port: config.smtpPort,
-          username: config.smtpUsername,
-          password: config.smtpPassword,
-          fromName: config.mailFromName,
-          appName: config.mailFromName,
-        ),
+        credentials: MongoCredentialRepository(store),
+        mailer: config.mailScriptUrl != null
+            ? AppsScriptOtpMailer(
+                url: config.mailScriptUrl!,
+                secret: config.mailScriptSecret!,
+                fromName: config.mailFromName,
+                appName: config.mailFromName,
+              )
+            : SmtpOtpMailer(
+                host: config.smtpHost,
+                port: config.smtpPort,
+                username: config.smtpUsername,
+                password: config.smtpPassword,
+                fromName: config.mailFromName,
+                appName: config.mailFromName,
+              ),
         auth: authTokens,
         pepper: config.otpPepper,
         allowSelfRegistration: config.allowSelfRegistration,
         bootstrapAdmins: config.bootstrapAdminEmails,
       ),
       reportService: reportService,
-      images: ImageService(FirestoreImageRepository(firestore)),
-      broadcasts: BroadcastService(broadcasts: FirestoreBroadcastRepository(firestore), notifications: notifications),
+      images: ImageService(MongoImageRepository(store)),
+      broadcasts: BroadcastService(broadcasts: MongoBroadcastRepository(store), notifications: notifications),
       walks: WalkService(
-        walks: FirestoreWalkRepository(firestore),
+        walks: MongoWalkRepository(store),
         users: users,
         reports: reportService,
         notifications: notifications,

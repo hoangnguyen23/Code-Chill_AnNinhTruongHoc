@@ -3,7 +3,7 @@ import 'package:campus_safety_backend/backend.dart';
 import 'package:dart_frog/dart_frog.dart';
 
 /// POST /reports/{id}/status {status, note?} : bảo vệ/quản trị cập nhật trạng thái.
-/// Gửi Zalo "cập nhật trạng thái" và push cho người báo.
+/// Gửi thông báo đẩy cho người báo.
 Future<Response> onRequest(RequestContext context, String id) async {
   ensureMethod(context, {HttpMethod.post});
   final services = context.read<AppServices>();
@@ -14,9 +14,6 @@ Future<Response> onRequest(RequestContext context, String id) async {
   if (status == null) throw ApiException.validation({'status': 'Trạng thái không hợp lệ.'});
   final note = optionalString(body, 'note', label: 'Ghi chú', maxLength: ReportStatusMachine.maxNoteLength);
 
-  final (report, zalo) = await services.reportService.changeStatus(user, id, to: status, note: note);
-  return Response.json(body: {
-    'report': report.toApiJson(),
-    'reporterNotification': zalo?.toJson(),
-  });
+  final report = await services.reportService.changeStatus(user, id, to: status, note: note);
+  return Response.json(body: {'report': report.toApiJson()});
 }

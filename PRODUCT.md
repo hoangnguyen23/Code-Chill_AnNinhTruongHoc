@@ -8,13 +8,13 @@ product
 
 App Android (mobile) dùng trong khuôn viên một trường đại học Việt Nam, ba nhóm người dùng:
 
-- **Người báo** (sinh viên, giảng viên, nhân viên): thường mở app khi đang lo lắng hoặc hoảng, có thể đang đứng ngoài trời, cầm máy một tay. Việc cần làm: báo sự cố thật nhanh (khẩn cấp) hoặc báo chi tiết kèm ảnh, vị trí; sau đó theo dõi trạng thái và nhận tin Zalo.
-- **Bảo vệ**: trực ca, kể cả ban đêm, nhận cảnh báo qua Zalo và push. Việc cần làm: thấy ngay sự cố mới nhất, mức độ, vị trí; nhận việc, cập nhật trạng thái, trao đổi với người báo.
-- **Quản trị** (phòng bảo vệ / phòng hành chính): phân công, xem thống kê, quản lý tài khoản, kiểm tra kênh Zalo (gửi thử, nhật ký gửi tin).
+- **Người báo** (sinh viên, giảng viên, nhân viên): thường mở app khi đang lo lắng hoặc hoảng, có thể đang đứng ngoài trời, cầm máy một tay. Việc cần làm: báo sự cố thật nhanh (khẩn cấp) hoặc báo chi tiết kèm ảnh, vị trí; sau đó theo dõi trạng thái và nhận thông báo đẩy.
+- **Bảo vệ**: trực ca, kể cả ban đêm, nhận cảnh báo qua thông báo đẩy. Việc cần làm: thấy ngay sự cố mới nhất, mức độ, vị trí; nhận việc, cập nhật trạng thái, trao đổi với người báo.
+- **Quản trị** (phòng bảo vệ / phòng hành chính): phân công, xem thống kê, quản lý tài khoản, gửi cảnh báo toàn trường (gửi thử, nhật ký gửi tin).
 
 ## Product Purpose
 
-Rút ngắn thời gian từ lúc có sự cố tới lúc bảo vệ có mặt, và cho người báo biết chắc báo cáo đã được tiếp nhận. Tin nhắn đi qua Zalo (ZBS Template Message) vì đó là kênh mọi người ở Việt Nam đều mở. Thành công là: báo khẩn cấp trong 2 chạm, bảo vệ trực nhận cảnh báo trong vài giây, người báo luôn biết báo cáo đang ở trạng thái nào.
+Rút ngắn thời gian từ lúc có sự cố tới lúc bảo vệ có mặt, và cho người báo biết chắc báo cáo đã được tiếp nhận. Thành công là: báo khẩn cấp trong 2 chạm, bảo vệ trực nhận cảnh báo trong vài giây, người báo luôn biết báo cáo đang ở trạng thái nào.
 
 ## Brand Personality
 
@@ -32,7 +32,7 @@ Giọng của một phòng bảo vệ chuyên nghiệp nhưng thân thiện: câ
 ## Design Principles
 
 1. **Hành động nguy cấp phải nhanh nhất và khó nhầm nhất.** KHẨN CẤP luôn là vật thể nổi bật nhất trang chủ, gửi trong 2 chạm, có nút gọi trực ở mọi nơi người dùng có thể cần.
-2. **Luôn cho biết chuyện gì vừa xảy ra.** Mỗi thao tác có phản hồi rõ: đã gửi, Zalo đã tới chưa, bao nhiêu bảo vệ đã nhận, lỗi là gì và làm gì tiếp.
+2. **Luôn cho biết chuyện gì vừa xảy ra.** Mỗi thao tác có phản hồi rõ: đã gửi, thông báo đã tới chưa, bao nhiêu bảo vệ đã nhận, lỗi là gì và làm gì tiếp.
 3. **Bình tĩnh là mặc định, khẩn trương là ngoại lệ.** Giao diện yên, một màu nhấn; màu đỏ và rung chỉ xuất hiện khi thật sự khẩn cấp.
 4. **Tôn trọng người báo.** Ẩn danh là thật (bảo vệ không thấy tên, số); chữ nói như người với người, không thuật ngữ kỹ thuật với người báo.
 5. **Một tay, mọi điều kiện.** Vùng chạm lớn, nút chính ở tầm ngón cái, đọc được dưới nắng và trong ca đêm (sáng/tối).

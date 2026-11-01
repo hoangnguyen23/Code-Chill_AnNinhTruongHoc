@@ -109,7 +109,7 @@ Thanh điều hướng dưới (NavigationBar), đích khác nhau theo vai trò:
 - **Người báo**: Trang chủ (khối KHẨN CẤP, gửi báo cáo, báo cáo gần đây), Báo cáo của tôi, Cài đặt.
 - **Bảo vệ**: Sự cố (hàng đợi có lọc), Được giao cho tôi, Cài đặt. Nút "Báo cáo" vẫn có ở trang Sự cố.
 - **Quản trị**: Tổng quan (thống kê), Sự cố (lọc + phân công), Quản lý (tài khoản, cấu hình,
-  gửi thử Zalo, nhật ký gửi tin), Cài đặt.
+  cảnh báo toàn trường), Cài đặt.
 
 Nút "Gọi trực an ninh" xuất hiện ở: màn đăng nhập, khối khẩn cấp, sheet khẩn cấp.
 
@@ -118,7 +118,7 @@ Nút "Gọi trực an ninh" xuất hiện ở: màn đăng nhập, khối khẩn
 1. Chạm khối KHẨN CẤP (1 chạm) → mở sheet toàn màn, rung, bắt đầu lấy GPS ngay.
 2. Sheet có: chip loại sự cố (tuỳ chọn, mặc định "Khác"), ô ghi chú ngắn (tuỳ chọn),
    công tắc ẩn danh, nút **Gửi cảnh báo ngay** (đỏ, 64dp) và **Gọi trực an ninh**.
-3. Gửi xong: hiện mã sự cố cỡ lớn, số bảo vệ đã nhận cảnh báo Zalo, nút gọi trực.
+3. Gửi xong: hiện mã sự cố cỡ lớn, số thiết bị đã nhận thông báo, nút gọi trực.
 
 Hai chạm là đủ (không bắt giữ nút) để người dùng TalkBack và người đang run tay đều dùng được,
 nhưng không thể gửi nhầm chỉ bằng một chạm vô tình.
@@ -135,8 +135,8 @@ nhưng không thể gửi nhầm chỉ bằng một chạm vô tình.
 - Tiếng Việt, câu thường (không viết hoa toàn bộ trừ chữ "KHẨN CẤP"), động từ rõ:
   "Gửi báo cáo", "Tiếp nhận", "Bắt đầu xử lý", "Đánh dấu đã giải quyết", "Từ chối".
 - Không dùng gạch ngang dài trong chữ hiển thị; dùng dấu hai chấm, dấu phẩy hoặc xuống dòng.
-- Lỗi = chuyện gì xảy ra + làm gì tiếp. Ví dụ: "Số này chưa có tài khoản Zalo. Hãy dùng số đã
-  đăng ký Zalo hoặc liên hệ quản trị."
+- Lỗi = chuyện gì xảy ra + làm gì tiếp. Ví dụ: "Email này chưa đăng ký tài khoản. Hãy kiểm tra
+  lại hoặc đăng ký."
 - Không tên mẫu giả, không số liệu thống kê bịa; màn thống kê chỉ hiện dữ liệu thật.
 
 ## 13. Accessibility
@@ -168,7 +168,6 @@ Bối cảnh chiến lược ở `PRODUCT.md`.
 | P2 | Icon khẩn cấp là dấu sao y tế, dễ hiểu nhầm | Đổi sang icon SOS ở mọi nơi |
 | P2 | Câu "Chưa có báo cáo đã giải quyết" mâu thuẫn với ô "Đã giải quyết 1" | "Chưa đủ dữ liệu thời gian giải quyết" |
 | P2 | Nhật ký gửi tin chỉ hiện "Lỗi -118", phải mở chi tiết mới biết lý do | Hiện luôn thông báo tiếng Việt dưới dòng lỗi |
-| P2 | Cảnh báo cấu hình Zalo (thiếu template) hiển thị như ghi chú thông tin | Hiển thị như lỗi (errorContainer) |
 | P3 | Nền xem ảnh đen tuyệt đối; thumbnail giải mã ảnh gốc 1600px | Token `viewerBackground`; `cacheWidth` theo kích thước hiển thị |
 | P3 | Cuộn lên lỗi form vẫn có animation khi máy bật giảm chuyển động | Nhảy thẳng khi `disableAnimations` |
 | P3 | Màn đăng nhập: icon căn giữa nhưng chữ căn trái | Căn trái đồng bộ |

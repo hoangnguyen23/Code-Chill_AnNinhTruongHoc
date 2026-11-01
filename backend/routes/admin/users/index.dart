@@ -4,12 +4,18 @@ import 'package:campus_core/campus_core.dart';
 import 'package:campus_safety_backend/backend.dart';
 import 'package:dart_frog/dart_frog.dart';
 
+/// GET /admin/users?role=reporter|guard|admin : danh sách tài khoản; không có `role` thì lấy bảo vệ
+/// và quản trị (để phân công).
 /// POST /admin/users {email, phone?, displayName, role, memberType?, onDuty?} : tạo trước tài khoản
-/// (bảo vệ, quản trị, hoặc người báo khi tắt tự đăng ký). Danh sách tài khoản app đọc thẳng
-/// từ Firestore (Rules chỉ cho quản trị đọc).
+/// (bảo vệ, quản trị, hoặc người báo khi tắt tự đăng ký).
 Future<Response> onRequest(RequestContext context) async {
-  ensureMethod(context, {HttpMethod.post});
+  ensureMethod(context, {HttpMethod.get, HttpMethod.post});
   final services = context.read<AppServices>();
+  if (context.request.method == HttpMethod.get) {
+    final role = UserRole.tryFromWire(context.request.uri.queryParameters['role']);
+    final users = await services.users.listByRoles(role == null ? {UserRole.guard, UserRole.admin} : {role});
+    return Response.json(body: {'users': [for (final u in users) u.toApiJson()]});
+  }
   final body = await readJsonObject(context.request);
 
   final EmailAddress email;

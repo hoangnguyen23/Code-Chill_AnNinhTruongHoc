@@ -10,27 +10,19 @@ class CampusInfo {
     required this.campusName,
     required this.hotline,
     required this.buildings,
-    required this.zaloMode,
   });
 
   factory CampusInfo.fromJson(Map<String, Object?> j) => CampusInfo(
         campusName: (j['campusName'] as String?) ?? '',
         hotline: j['hotline'] as String?,
         buildings: (j['buildings'] as List?)?.whereType<String>().toList() ?? const [],
-        zaloMode: (j['zaloMode'] as String?) ?? 'production',
       );
 
   final String campusName;
   final String? hotline;
   final List<String> buildings;
-  final String zaloMode;
 
   bool get hasHotline => hotline != null && hotline!.trim().isNotEmpty;
-
-  bool get isZaloDevelopment => zaloMode == 'development';
-
-  /// Backend có bật gửi tin Zalo hay không (`off` khi chưa cấu hình).
-  bool get isZaloEnabled => zaloMode != 'off';
 }
 
 abstract interface class CampusRepository {

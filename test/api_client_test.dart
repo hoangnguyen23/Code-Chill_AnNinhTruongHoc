@@ -40,20 +40,15 @@ void main() {
     expect(called, isFalse);
   });
 
-  test('lỗi Zalo từ backend giữ nguyên thông báo tiếng Việt và mã lỗi', () async {
-    final api = client((_) async => json(422, {
-          'error': {
-            'code': 'zalo_recipient',
-            'message': 'Số điện thoại này chưa có tài khoản Zalo hoặc tài khoản đã bị vô hiệu hoá.',
-            'details': {'zaloErrorCode': -118, 'trackingId': 'OTPABC123'},
-          },
+  test('lỗi từ backend giữ nguyên thông báo tiếng Việt và mã lỗi', () async {
+    final api = client((_) async => json(503, {
+          'error': {'code': 'email_send_failed', 'message': 'Không gửi được email. Kiểm tra lại địa chỉ email rồi thử lại.'},
         }));
     await expectLater(
-      api.post('/auth/otp/request', {'email': 'khoa@gmail.com'}, false),
+      api.post('/auth/password/forgot', {'email': 'khoa@gmail.com'}, false),
       throwsA(isA<ApiError>()
-          .having((e) => e.isZalo, 'isZalo', isTrue)
-          .having((e) => e.zaloErrorCode, 'zaloErrorCode', -118)
-          .having((e) => e.message, 'message', contains('chưa có tài khoản Zalo'))),
+          .having((e) => e.code, 'code', 'email_send_failed')
+          .having((e) => e.message, 'message', contains('Không gửi được email'))),
     );
   });
 
@@ -100,5 +95,24 @@ void main() {
 
   test('errorMessage cho lỗi Firestore thiếu quyền', () {
     expect(errorMessage(Exception('[cloud_firestore/permission-denied] Missing permissions')), contains('không có quyền'));
+  });
+
+  test('backend báo 401: gọi onSessionExpired; lỗi khác hoặc API công khai thì không', () async {
+    var expired = 0;
+    final api = ApiClient(
+      baseUrl: 'http://x',
+      idToken: () async => 'id-token',
+      onSessionExpired: () async => expired++,
+      client: MockClient((req) async => http.Response(
+            req.url.path == '/loi' ? '{"error":{"code":"internal","message":"m"}}' : '{"error":{"code":"unauthorized","message":"m"}}',
+            req.url.path == '/loi' ? 500 : 401,
+          )),
+    );
+    await expectLater(api.get('/me'), throwsA(isA<ApiError>()));
+    expect(expired, 1);
+    await expectLater(api.post('/auth/login', {'username': 'a'}, false), throwsA(isA<ApiError>()));
+    expect(expired, 1, reason: 'đăng nhập sai không phải hết phiên');
+    await expectLater(api.get('/loi'), throwsA(isA<ApiError>()));
+    expect(expired, 1);
   });
 }

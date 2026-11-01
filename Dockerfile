@@ -1,33 +1,24 @@
-# Stage 1: Build binary
+# Build backend (dart_frog) cho Render. Ngữ cảnh build là thư mục gốc dự án
+# vì backend phụ thuộc packages/campus_core.
 FROM dart:stable AS build
 
-# Đặt thư mục làm việc
 WORKDIR /app
+COPY packages/campus_core packages/campus_core
+COPY backend backend
 
-# Kích hoạt dart_frog CLI
-RUN dart pub global activate dart_frog_cli
-
-# Copy package campus_core và backend để resolve dependencies
-COPY packages/campus_core ./packages/campus_core
-COPY backend ./backend
-
-# Build production bundle từ backend
 WORKDIR /app/backend
+RUN dart pub global activate dart_frog_cli
 RUN dart pub get
 RUN dart pub global run dart_frog_cli:dart_frog build
 
-# Compile mã nguồn đã build thành file binary thực thi độc lập
 WORKDIR /app/backend/build
-RUN dart pub get --offline
+RUN dart pub get
 RUN dart compile exe bin/server.dart -o bin/server
 
-# Stage 2: Runtime image siêu nhẹ
-FROM subfuzion/dart:slim
-
-WORKDIR /app
+# Ảnh chạy tối giản: chỉ có file thực thi, thư viện hệ thống và config/buildings.
+FROM scratch
+COPY --from=build /runtime/ /
 COPY --from=build /app/backend/build/bin/server /app/bin/server
-
-# Expose cổng mặc định của Render (Render thường bind qua biến PORT, mặc định là 8080)
-EXPOSE 8080
-
+COPY --from=build /app/backend/config /app/config
+WORKDIR /app
 CMD ["/app/bin/server"]

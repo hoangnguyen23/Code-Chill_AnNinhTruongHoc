@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -17,13 +18,29 @@ class PasswordHasher {
   static const _prefix = 'pbkdf2_sha256';
   static const _keyLength = 32;
 
-  String hash(String password) {
-    final salt = Uint8List.fromList(List.generate(16, (_) => _random.nextInt(256)));
-    final key = _pbkdf2(utf8.encode(password), salt, iterations);
-    return '$_prefix\$$iterations\$${base64Encode(salt)}\$${base64Encode(key)}';
+  /// PBKDF2 tốn vài giây trên máy chủ yếu. Chạy ở isolate riêng để một lần đăng nhập không làm mọi
+  /// request khác (kể cả SOS) phải chờ.
+  Future<String> hashAsync(String password) => _hashIn(password, _newSalt(), iterations);
+
+  Future<bool> verifyAsync(String password, String stored) => _verifyIn(password, stored);
+
+  static Future<String> _hashIn(String password, Uint8List salt, int rounds) =>
+      Isolate.run(() => _format(password, salt, rounds));
+
+  static Future<bool> _verifyIn(String password, String stored) => Isolate.run(() => _verify(password, stored));
+
+  Uint8List _newSalt() => Uint8List.fromList(List.generate(16, (_) => _random.nextInt(256)));
+
+  String hash(String password) => _format(password, _newSalt(), iterations);
+
+  bool verify(String password, String stored) => _verify(password, stored);
+
+  static String _format(String password, Uint8List salt, int rounds) {
+    final key = _pbkdf2(utf8.encode(password), salt, rounds);
+    return '$_prefix\$$rounds\$${base64Encode(salt)}\$${base64Encode(key)}';
   }
 
-  bool verify(String password, String stored) {
+  static bool _verify(String password, String stored) {
     final parts = stored.split(r'$');
     if (parts.length != 4 || parts[0] != _prefix) return false;
     final rounds = int.tryParse(parts[1]);

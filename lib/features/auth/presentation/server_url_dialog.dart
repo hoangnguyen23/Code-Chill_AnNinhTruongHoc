@@ -13,7 +13,7 @@ import '../../campus/campus_info.dart';
 Future<void> showServerUrlDialog(BuildContext context) =>
     showDialog<void>(context: context, builder: (_) => const _ServerUrlDialog());
 
-/// Đổi địa chỉ backend (ví dụ IP Wi-Fi của laptop chạy backend) và kiểm tra kết nối.
+/// Đổi địa chỉ backend và kiểm tra kết nối. Bình thường dùng địa chỉ mặc định đã deploy.
 class _ServerUrlDialog extends ConsumerStatefulWidget {
   const _ServerUrlDialog();
 
@@ -53,10 +53,10 @@ class _ServerUrlDialogState extends ConsumerState<_ServerUrlDialog> {
       _result = _ok ? 'Kết nối được máy chủ.' : 'Địa chỉ này không phải máy chủ của ứng dụng.';
     } on TimeoutException {
       _ok = false;
-      _result = 'Không phản hồi. Kiểm tra laptop đã chạy backend, cùng Wi-Fi và tường lửa cho phép cổng 8080.';
+      _result = 'Không phản hồi. Máy chủ có thể đang khởi động, đợi 1 phút rồi thử lại.';
     } on Object {
       _ok = false;
-      _result = 'Không kết nối được. Kiểm tra lại địa chỉ IP và mạng Wi-Fi.';
+      _result = 'Không kết nối được. Kiểm tra lại địa chỉ và mạng của điện thoại.';
     } finally {
       if (mounted) setState(() => _checking = false);
     }

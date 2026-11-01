@@ -1,6 +1,6 @@
 /// Chuẩn hoá và kiểm tra số điện thoại di động Việt Nam.
 ///
-/// Zalo ZBS Template Message yêu cầu số ở dạng mã quốc gia, ví dụ
+/// Lưu ở dạng có mã quốc gia, ví dụ
 /// `0987654321` phải gửi thành `84987654321`.
 library;
 
@@ -45,7 +45,7 @@ class PhoneFormatException implements Exception {
 class VietnamPhone {
   const VietnamPhone._(this.international);
 
-  /// Dạng `84xxxxxxxxx` (11 chữ số), dùng để gửi Zalo và lưu trữ.
+  /// Dạng `84xxxxxxxxx` (11 chữ số), dùng để lưu trữ.
   final String international;
 
   /// Dạng nội địa `0xxxxxxxxx`.

@@ -1,22 +1,34 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:campus_core/campus_core.dart';
 import 'package:dart_frog/dart_frog.dart';
 
 import 'api_exception.dart';
 
-/// Đọc body JSON dạng object. Ném [ApiException] 400 nếu sai định dạng.
-Future<Map<String, Object?>> readJsonObject(Request request) async {
-  final String raw;
+/// Đọc body, dừng ngay khi vượt [maxBytes] để request khổng lồ không chiếm hết bộ nhớ máy chủ.
+Future<String> readBody(Request request, {required int maxBytes, String tooLarge = 'Dữ liệu gửi lên quá lớn.'}) async {
+  ApiException error() => ApiException(HttpStatus.requestEntityTooLarge, 'payload_too_large', tooLarge);
+  final declared = int.tryParse(request.headers[HttpHeaders.contentLengthHeader] ?? '');
+  if (declared != null && declared > maxBytes) throw error();
+  final bytes = BytesBuilder(copy: false);
   try {
-    raw = await request.body();
+    await for (final chunk in request.bytes()) {
+      bytes.add(chunk);
+      if (bytes.length > maxBytes) throw error();
+    }
+    return utf8.decode(bytes.takeBytes());
+  } on ApiException {
+    rethrow;
   } on Object {
     throw ApiException.badRequest('Không đọc được dữ liệu gửi lên.');
   }
-  if (raw.length > 64 * 1024) {
-    throw ApiException(HttpStatus.requestEntityTooLarge, 'payload_too_large', 'Dữ liệu gửi lên quá lớn.');
-  }
+}
+
+/// Đọc body JSON dạng object. Ném [ApiException] 400 nếu sai định dạng.
+Future<Map<String, Object?>> readJsonObject(Request request) async {
+  final raw = await readBody(request, maxBytes: 64 * 1024);
   if (raw.trim().isEmpty) return {};
   try {
     final decoded = jsonDecode(raw);
@@ -82,16 +94,21 @@ VietnamPhone? readOptionalPhone(Map<String, Object?> body) {
   }
 }
 
-/// IP của client. Khi [trustProxy] bật (chạy sau Cloud Run/Nginx) thì lấy IP đầu tiên trong
-/// `X-Forwarded-For`.
+/// IP của client. Khi [trustProxy] bật (chạy sau Render/Nginx) thì đọc từ header của proxy.
 String clientIp(RequestContext context, {required bool trustProxy}) {
-  if (trustProxy) {
-    final forwarded = context.request.headers['x-forwarded-for'];
-    if (forwarded != null && forwarded.trim().isNotEmpty) {
-      return forwarded.split(',').first.trim();
-    }
-  }
-  return context.request.connectionInfo.remoteAddress.address;
+  final proxied = trustProxy ? proxiedClientIp(context.request.headers) : null;
+  return proxied ?? context.request.connectionInfo.remoteAddress.address;
+}
+
+/// IP do proxy ghi nhận. Không lấy giá trị đầu của `X-Forwarded-For` vì client tự gửi được
+/// (đổi giá trị mỗi lần là né được giới hạn theo IP): dùng `CF-Connecting-IP` do Cloudflare trước
+/// Render ghi đè, nếu không có thì lấy giá trị cuối, tức do proxy gần nhất thêm vào.
+String? proxiedClientIp(Map<String, String> headers) {
+  final cloudflare = headers['cf-connecting-ip']?.trim();
+  if (cloudflare != null && cloudflare.isNotEmpty) return cloudflare;
+  final forwarded = headers['x-forwarded-for'];
+  if (forwarded == null || forwarded.trim().isEmpty) return null;
+  return forwarded.split(',').last.trim();
 }
 
 /// Chỉ cho phép các phương thức trong [allowed].

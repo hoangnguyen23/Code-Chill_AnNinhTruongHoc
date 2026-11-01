@@ -18,6 +18,9 @@ class _MemoryBroadcasts implements BroadcastRepository {
   Future<BroadcastRecord?> byId(String id) async => items[id];
 
   @override
+  Future<List<BroadcastRecord>> recent({required int limit}) async => items.values.take(limit).toList();
+
+  @override
   Future<void> end(String id, DateTime at) async {
     final b = items[id]!;
     items[id] = BroadcastRecord(
@@ -67,7 +70,6 @@ void main() {
   late TestClock clock;
   late MemoryUserRepository users;
   late MemoryReportRepository reports;
-  late RecordingGateway gateway;
   late RecordingPushService push;
   late NotificationService notifications;
   late UserRecord student, guard, admin;
@@ -76,9 +78,8 @@ void main() {
     clock = TestClock(DateTime.utc(2026, 10, 25, 13));
     users = MemoryUserRepository();
     reports = MemoryReportRepository();
-    gateway = RecordingGateway();
     push = RecordingPushService();
-    notifications = NotificationService(gateway: gateway, push: push, users: users, extraDutyPhones: const []);
+    notifications = NotificationService(push: push, users: users);
     student = users.seed(email: 'khoa@gmail.com', name: 'Trần Minh Khoa', tokens: ['tok-s']);
     guard = users.seed(name: 'Lê Văn Hùng', role: UserRole.guard, onDuty: true, tokens: ['tok-g']);
     admin = users.seed(name: 'Đỗ Thu Hà', role: UserRole.admin, tokens: ['tok-a']);
@@ -209,7 +210,7 @@ void main() {
       await expectLater(service.cancel(student, walk.id), throwsA(apiError('walk_ended')));
     });
 
-    group('nhiều backend dùng chung Firestore', () {
+    group('nhiều backend dùng chung CSDL', () {
       // Mỗi laptop chạy một backend riêng nhưng cùng database: dùng chung kho lượt đi và báo cáo.
       WalkService backend() => WalkService(
             walks: store,

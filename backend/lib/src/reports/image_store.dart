@@ -3,42 +3,46 @@ import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:campus_core/campus_core.dart';
-import 'package:dart_firebase_admin/firestore.dart';
+import 'package:mongo_dart/mongo_dart.dart' show BsonBinary, where;
 
-import '../data/firestore_repositories.dart';
 import '../data/models.dart';
+import '../data/mongo_store.dart';
 import '../http/api_exception.dart';
 
-/// Kho ảnh sự cố. Lưu trong Firestore (`report_images/{id}`) để mọi backend dùng chung mà không
-/// cần Firebase Storage (Storage đòi gói trả phí Blaze).
+/// Kho ảnh sự cố, lưu trong MongoDB (collection `report_images`).
 abstract interface class ImageRepository {
   Future<void> save(String id, {required String uploaderUid, required Uint8List bytes});
 
   Future<Uint8List?> load(String id);
 }
 
-class FirestoreImageRepository implements ImageRepository {
-  FirestoreImageRepository(this._db);
+class MongoImageRepository implements ImageRepository {
+  MongoImageRepository(this._store);
 
-  final Firestore _db;
+  final MongoStore _store;
 
-  DocumentReference<DocumentData> _ref(String id) => _db.doc('${Collections.reportImages}/$id');
+  static const _name = Collections.reportImages;
 
   @override
   Future<void> save(String id, {required String uploaderUid, required Uint8List bytes}) async {
-    await _ref(id).set({
-      'data': base64Encode(bytes),
-      'contentType': 'image/jpeg',
-      'size': bytes.length,
-      'uploaderUid': uploaderUid,
-      'createdAt': DateTime.now().toUtc(),
-    });
+    final result = await _store.run(
+      _name,
+      (c) => c.insertOne({
+        '_id': id,
+        'data': BsonBinary.from(bytes),
+        'contentType': 'image/jpeg',
+        'size': bytes.length,
+        'uploaderUid': uploaderUid,
+        'createdAt': DateTime.now().toUtc(),
+      }),
+    );
+    if (!result.isSuccess) throw StateError('insert_image_failed');
   }
 
   @override
   Future<Uint8List?> load(String id) async {
-    final data = (await _ref(id).get()).data()?['data'];
-    return data is String ? base64Decode(data) : null;
+    final data = (await _store.run(_name, (c) => c.findOne(where.eq('_id', id))))?['data'];
+    return data is BsonBinary ? data.byteList : null;
   }
 }
 

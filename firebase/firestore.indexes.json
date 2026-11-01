@@ -15,14 +15,6 @@
         { "fieldPath": "assigneeUid", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
-    },
-    {
-      "collectionGroup": "zalo_logs",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "success", "order": "ASCENDING" },
-        { "fieldPath": "createdAt", "order": "DESCENDING" }
-      ]
     }
   ],
   "fieldOverrides": []

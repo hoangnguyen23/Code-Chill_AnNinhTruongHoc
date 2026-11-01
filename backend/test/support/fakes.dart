@@ -1,32 +1,8 @@
 // Bản cài đặt trong bộ nhớ CHỈ dùng cho unit test, để chạy nhanh mà không cần Firebase.
-// Mã chạy thật luôn dùng Firestore, SMTP và Zalo thật (xem lib/src/app_services.dart).
+// Mã chạy thật luôn dùng MongoDB và gửi mail thật (xem lib/src/app_services.dart).
 import 'package:campus_core/campus_core.dart';
 import 'package:campus_safety_backend/backend.dart';
 import 'package:campus_safety_backend/src/notifications/push_service.dart';
-import 'package:campus_safety_backend/src/notifications/send_log.dart';
-
-class MemorySendLogRepository implements SendLogRepository {
-  final entries = <SendLogEntry>[];
-
-  @override
-  Future<void> add(SendLogEntry entry) async => entries.add(entry);
-}
-
-class MemoryTokenStore implements ZaloTokenStore {
-  MemoryTokenStore([this.state]);
-
-  ZaloTokenState? state;
-  int writes = 0;
-
-  @override
-  Future<ZaloTokenState?> read() async => state;
-
-  @override
-  Future<void> write(ZaloTokenState s) async {
-    writes++;
-    state = s;
-  }
-}
 
 class MemoryOtpStore implements OtpStore {
   final data = <String, OtpChallenge>{};
@@ -147,6 +123,10 @@ class MemoryUserRepository implements UserRepository {
   @override
   Future<List<UserRecord>> listStaff() async =>
       byUid.values.where((u) => u.role.isStaff && u.active).toList();
+
+  @override
+  Future<List<UserRecord>> listByRoles(Set<UserRole> roles) async =>
+      byUid.values.where((u) => roles.contains(u.role)).toList();
 }
 
 class MemoryCredentialRepository implements CredentialRepository {
@@ -237,44 +217,27 @@ class MemoryReportRepository implements ReportRepository {
 
   @override
   Future<void> addEvent(String reportId, ReportEvent event) async => events[reportId]!.add(event);
-}
-
-/// Gateway ghi lại tin cần gửi; kết quả trả về theo [failFor].
-class RecordingGateway implements NotificationGateway {
-  final sent = <TemplateMessage>[];
-
-  /// Số điện thoại (84...) -> mã lỗi Zalo giả lập.
-  final failFor = <String, int>{};
 
   @override
-  String get channel => 'test';
+  Future<List<ReportEvent>> eventsOf(String id) async => events[id] ?? const [];
+
+  List<ReportRecord> _newest(bool Function(ReportRecord) test, int limit) =>
+      (reports.values.where(test).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt))).take(limit).toList();
 
   @override
-  String get mode => 'development';
+  Future<List<ReportRecord>> listOpen({required int limit}) async => _newest((r) => !r.status.isClosed, limit);
 
   @override
-  bool isConfigured(ZaloTemplateKey template) => true;
+  Future<List<ReportRecord>> listSince(DateTime from, {required int limit}) async =>
+      _newest((r) => !r.createdAt.isBefore(from), limit);
 
   @override
-  Future<SendResult> send(TemplateMessage message) async {
-    sent.add(message);
-    final code = failFor[message.recipient.international];
-    final info = code == null ? null : ZaloErrorCatalog.lookup(code);
-    return SendResult(
-      success: info == null,
-      channel: channel,
-      template: message.template,
-      templateId: 'tpl',
-      trackingId: 'TRACK${sent.length}',
-      recipientMasked: message.recipient.masked,
-      mode: mode,
-      sentAt: DateTime.utc(2026, 10, 19),
-      durationMs: 1,
-      errorCode: info?.code,
-      errorKind: info?.kind,
-      userMessage: info?.message,
-    );
-  }
+  Future<List<ReportRecord>> listAssignedTo(String uid, {required int limit}) async =>
+      _newest((r) => r.assigneeUid == uid, limit);
+
+  @override
+  Future<List<ReportRecord>> listByReporter(String uid, {required int limit}) async =>
+      _newest((r) => privates[r.id]?.uid == uid, limit);
 }
 
 /// Ghi lại email OTP cần gửi; [failWith] khác null thì giả lập gửi thất bại.

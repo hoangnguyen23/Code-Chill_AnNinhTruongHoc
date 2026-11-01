@@ -56,3 +56,6 @@ app.*.map.json
 
 # Ảnh chụp màn hình tạo bởi tool/screenshots (tạo lại bằng flutter test ... --update-goldens)
 /tool/screenshots/failures/
+
+# Script Apps Script đã điền khoá bí mật
+*.local.gs

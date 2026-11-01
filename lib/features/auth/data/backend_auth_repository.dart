@@ -74,7 +74,8 @@ class BackendAuthRepository implements AuthRepository {
 
   @override
   Future<void> changePassword(String currentPassword, String newPassword) async {
-    await _api.post('/me/password', {'currentPassword': currentPassword, 'newPassword': newPassword});
+    // Backend thu hồi mọi phiên cũ, máy này đăng nhập lại bằng token mới để không bị đăng xuất.
+    await _signIn(await _api.post('/me/password', {'currentPassword': currentPassword, 'newPassword': newPassword}));
   }
 
   /// Đăng nhập Firebase bằng custom token backend vừa cấp.

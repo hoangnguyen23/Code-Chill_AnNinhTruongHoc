@@ -1,11 +1,11 @@
 import 'package:campus_core/campus_core.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/firebase/firebase_providers.dart';
 import '../../core/format/formatters.dart';
 import '../../core/network/api_client.dart';
+import '../../core/network/polling.dart';
 import '../../core/theme/app_theme.dart';
 import '../auth/application/session.dart';
 
@@ -24,7 +24,7 @@ enum BroadcastLevel {
       values.where((v) => v.wire == wire).firstOrNull ?? BroadcastLevel.info;
 }
 
-/// Cảnh báo toàn trường (Firestore `broadcasts/{id}`), do quản trị gửi qua backend.
+/// Cảnh báo toàn trường, do quản trị gửi qua backend.
 class Broadcast {
   const Broadcast({
     required this.id,
@@ -37,8 +37,8 @@ class Broadcast {
     required this.createdByName,
   });
 
-  factory Broadcast.fromMap(String id, Map<String, dynamic> d) => Broadcast(
-        id: id,
+  factory Broadcast.fromJson(Map<String, dynamic> d) => Broadcast(
+        id: d['id'] as String,
         title: (d['title'] as String?) ?? '',
         body: (d['body'] as String?) ?? '',
         level: BroadcastLevel.fromWire(d['level'] as String?),
@@ -60,22 +60,22 @@ class Broadcast {
   /// Còn hiển thị trên banner: chưa bị gỡ và chưa hết hạn.
   bool isLive(DateTime now) => active && expiresAt.isAfter(now);
 
-  static DateTime? _date(Object? v) => v is Timestamp ? v.toDate() : null;
+  static DateTime? _date(Object? v) => v is String ? DateTime.tryParse(v)?.toLocal() : null;
 }
 
 class BroadcastRepository {
-  BroadcastRepository(this._db, this._api);
+  BroadcastRepository(this._api);
 
-  final FirebaseFirestore _db;
   final ApiClient _api;
 
   /// 20 cảnh báo gần nhất (kể cả đã gỡ), mới nhất trước.
-  Stream<List<Broadcast>> watchRecent() => _db
-      .collection('broadcasts')
-      .orderBy('createdAt', descending: true)
-      .limit(20)
-      .snapshots()
-      .map((s) => s.docs.map((d) => Broadcast.fromMap(d.id, d.data())).toList());
+  Stream<List<Broadcast>> watchRecent() => pollApi(
+        _api,
+        '/broadcasts',
+        (j) => [
+          for (final b in ((j['broadcasts'] as List?) ?? const []).whereType<Map>()) Broadcast.fromJson(b.cast<String, dynamic>()),
+        ],
+      );
 
   /// Trả về số thiết bị đã nhận push.
   Future<int> send({required String title, required String body, required BroadcastLevel level, required int hours}) async {
@@ -92,11 +92,11 @@ class BroadcastRepository {
 }
 
 final broadcastRepositoryProvider = Provider<BroadcastRepository>(
-  (ref) => BroadcastRepository(ref.watch(firestoreProvider), ref.watch(apiClientProvider)),
+  (ref) => BroadcastRepository(ref.watch(apiClientProvider)),
 );
 
 final recentBroadcastsProvider = StreamProvider<List<Broadcast>>((ref) {
-  if (ref.watch(signedInUserProvider) == null) return Stream.value(const []);
+  if (ref.watch(signedInUserProvider.select((u) => u?.uid)) == null) return Stream.value(const []);
   return ref.watch(broadcastRepositoryProvider).watchRecent();
 });
 

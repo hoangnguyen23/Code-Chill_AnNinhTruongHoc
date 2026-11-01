@@ -29,7 +29,7 @@ void main() {
       overrides: [
         signedInUserProvider.overrideWithValue(student),
         campusInfoProvider.overrideWith(
-          (ref) async => const CampusInfo(campusName: 'Trường thử', hotline: null, buildings: [], zaloMode: 'off'),
+          (ref) async => const CampusInfo(campusName: 'Trường thử', hotline: null, buildings: []),
         ),
       ],
       child: MaterialApp(

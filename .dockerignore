@@ -1,7 +1,8 @@
-.git
-.dart_tool
-.idea
-.vscode
+# Chỉ gửi mã backend vào Docker, tuyệt đối không có khoá bí mật.
+*
+!packages/campus_core
+!backend
+**/.dart_tool
 **/build
 **/.env
-**/*.json
+**/service-account*.json

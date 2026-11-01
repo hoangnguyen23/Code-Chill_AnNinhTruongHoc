@@ -3,22 +3,6 @@ import 'dart:io';
 
 import 'package:campus_core/campus_core.dart';
 
-import '../notifications/zalo/zalo_templates.dart';
-
-/// Chế độ gửi ZBS Template Message. `development` thêm `"mode": "development"` vào body
-/// (chỉ gửi được tới quản trị viên ứng dụng/OA); `production` gửi thật.
-enum ZnsMode {
-  development,
-  production;
-
-  static ZnsMode? tryParse(String? raw) {
-    for (final m in values) {
-      if (m.name == raw?.trim().toLowerCase()) return m;
-    }
-    return null;
-  }
-}
-
 class ConfigException implements Exception {
   ConfigException(this.problems);
 
@@ -32,38 +16,29 @@ class ConfigException implements Exception {
 /// Toàn bộ cấu hình đọc từ `.env` / biến môi trường.
 class AppConfig {
   AppConfig({
+    required this.mongoUri,
     required this.firebaseProjectId,
     required this.serviceAccountPath,
-    required this.zaloAppId,
-    required this.zaloSecretKey,
-    required this.zaloSeedAccessToken,
-    required this.zaloSeedRefreshToken,
-    required this.znsMode,
-    required this.templateIds,
     required this.otpPepper,
     required this.smtpHost,
     required this.smtpPort,
     required this.smtpUsername,
     required this.smtpPassword,
+    required this.mailScriptUrl,
+    required this.mailScriptSecret,
     required this.mailFromName,
     required this.allowSelfRegistration,
     required this.bootstrapAdminEmails,
-    required this.dutyGuardPhones,
     required this.dutyHotline,
     required this.campusName,
     required this.defaultBuildings,
     required this.trustProxy,
-    this.warnings = const [],
   });
 
+  /// Chuỗi kết nối MongoDB (CSDL chính). Có chứa mật khẩu, không ghi ra log.
+  final String mongoUri;
   final String firebaseProjectId;
   final String? serviceAccountPath;
-  final String zaloAppId;
-  final String zaloSecretKey;
-  final String? zaloSeedAccessToken;
-  final String zaloSeedRefreshToken;
-  final ZnsMode znsMode;
-  final Map<ZaloTemplateKey, String> templateIds;
   final String otpPepper;
 
   /// Máy chủ gửi email OTP (mặc định Gmail).
@@ -71,41 +46,35 @@ class AppConfig {
   final int smtpPort;
   final String smtpUsername;
   final String smtpPassword;
+
+  /// Web app Google Apps Script gửi mail qua HTTPS. Có giá trị thì dùng thay SMTP.
+  final String? mailScriptUrl;
+  final String? mailScriptSecret;
   final String mailFromName;
   final bool allowSelfRegistration;
   final Set<EmailAddress> bootstrapAdminEmails;
 
-  /// Có cấu hình Zalo hay không. Tắt Zalo thì tin báo cáo chỉ gửi qua push FCM.
-  bool get zaloEnabled => zaloAppId.isNotEmpty;
-  final List<VietnamPhone> dutyGuardPhones;
   final String? dutyHotline;
   final String campusName;
   final List<String> defaultBuildings;
   final bool trustProxy;
 
-  /// Cảnh báo không chặn khởi động (ví dụ thiếu template ID).
-  final List<String> warnings;
-
   /// Mọi biến cấu hình backend đọc (xem `.env.example`).
   static final List<String> knownKeys = [
+    'MONGODB_URI',
     'FIREBASE_PROJECT_ID',
     'GOOGLE_APPLICATION_CREDENTIALS',
-    'ZALO_APP_ID',
-    'ZALO_SECRET_KEY',
-    'ZALO_ACCESS_TOKEN',
-    'ZALO_REFRESH_TOKEN',
-    'ZALO_ZNS_MODE',
-    for (final key in ZaloTemplateKey.values) key.envVar,
     'OTP_PEPPER',
     'SMTP_HOST',
     'SMTP_PORT',
     'SMTP_USERNAME',
     'SMTP_PASSWORD',
+    'MAIL_SCRIPT_URL',
+    'MAIL_SCRIPT_SECRET',
     'MAIL_FROM_NAME',
     'ALLOW_SELF_REGISTRATION',
     'BOOTSTRAP_ADMIN_EMAILS',
     'DUTY_HOTLINE',
-    'DUTY_GUARD_PHONES',
     'CAMPUS_NAME',
     'TRUST_PROXY',
   ];
@@ -116,7 +85,6 @@ class AppConfig {
     List<String> defaultBuildings = const [],
   }) {
     final problems = <String>[];
-    final warnings = <String>[];
 
     String? read(String key) {
       final v = env[key]?.trim();
@@ -138,21 +106,6 @@ class AppConfig {
       return fallback;
     }
 
-    List<VietnamPhone> readPhones(String key) {
-      final raw = read(key);
-      if (raw == null) return const [];
-      final result = <VietnamPhone>[];
-      for (final part in raw.split(RegExp(r'[,;]'))) {
-        if (part.trim().isEmpty) continue;
-        try {
-          result.add(VietnamPhone.parse(part));
-        } on PhoneFormatException catch (e) {
-          problems.add('$key có số không hợp lệ "${part.trim()}": ${e.message}');
-        }
-      }
-      return result;
-    }
-
     List<EmailAddress> readEmails(String key) {
       final raw = read(key);
       if (raw == null) return const [];
@@ -168,26 +121,33 @@ class AppConfig {
       return result;
     }
 
-    final projectId = requireKey('FIREBASE_PROJECT_ID', 'Project ID của Firebase.');
+    final mongoUri = requireKey('MONGODB_URI', 'Chuỗi kết nối MongoDB, ví dụ mongodb+srv://user:matkhau@cum.mongodb.net/an_ninh.');
+    if (mongoUri.isNotEmpty && !mongoUri.startsWith('mongodb')) {
+      problems.add('MONGODB_URI phải bắt đầu bằng mongodb:// hoặc mongodb+srv://.');
+    }
 
-    // Bỏ qua Zalo hoàn toàn, chỉ dùng FCM và Email OTP.
-    const appId = '';
-    const secret = '';
-    const refresh = '';
-    const mode = ZnsMode.development;
-    final templateIds = <ZaloTemplateKey, String>{};
+    final projectId = requireKey('FIREBASE_PROJECT_ID', 'Project ID của Firebase.');
 
     final pepper = requireKey('OTP_PEPPER', 'Chuỗi bí mật >= 32 ký tự để băm OTP.');
     if (pepper.isNotEmpty && pepper.length < 32) {
       problems.add('OTP_PEPPER phải dài ít nhất 32 ký tự.');
     }
 
-    final smtpUser = requireKey('SMTP_USERNAME', 'Địa chỉ Gmail dùng để gửi mã OTP.');
+    final mailScriptUrl = read('MAIL_SCRIPT_URL');
+    final mailScriptSecret = read('MAIL_SCRIPT_SECRET');
+    final useScript = mailScriptUrl != null;
+    if (useScript) {
+      if (!mailScriptUrl.startsWith('https://')) problems.add('MAIL_SCRIPT_URL phải bắt đầu bằng https://.');
+      if ((mailScriptSecret?.length ?? 0) < 32) problems.add('MAIL_SCRIPT_SECRET phải dài ít nhất 32 ký tự.');
+    }
+    String requireSmtp(String key, String hint) => useScript ? (read(key) ?? '') : requireKey(key, hint);
+
+    final smtpUser = requireSmtp('SMTP_USERNAME', 'Địa chỉ Gmail dùng để gửi mã OTP (hoặc đặt MAIL_SCRIPT_URL).');
     if (smtpUser.isNotEmpty && EmailAddress.tryParse(smtpUser) == null) {
       problems.add('SMTP_USERNAME phải là địa chỉ email (đang là "$smtpUser").');
     }
     // Mật khẩu ứng dụng Gmail hiển thị dạng "abcd efgh ijkl mnop": bỏ khoảng trắng.
-    final smtpPassword = requireKey(
+    final smtpPassword = requireSmtp(
       'SMTP_PASSWORD',
       'Mật khẩu ứng dụng của Gmail (myaccount.google.com/apppasswords), không phải mật khẩu đăng nhập.',
     ).replaceAll(' ', '');
@@ -203,28 +163,23 @@ class AppConfig {
     }
 
     final config = AppConfig(
+      mongoUri: mongoUri,
       firebaseProjectId: projectId,
       serviceAccountPath: read('GOOGLE_APPLICATION_CREDENTIALS'),
-      zaloAppId: appId,
-      zaloSecretKey: secret,
-      zaloSeedAccessToken: null,
-      zaloSeedRefreshToken: refresh,
-      znsMode: mode,
-      templateIds: templateIds,
       otpPepper: pepper,
       smtpHost: read('SMTP_HOST') ?? 'smtp.gmail.com',
       smtpPort: smtpPort ?? 587,
       smtpUsername: smtpUser,
       smtpPassword: smtpPassword,
+      mailScriptUrl: mailScriptUrl,
+      mailScriptSecret: mailScriptSecret,
       mailFromName: read('MAIL_FROM_NAME') ?? 'An ninh trường học',
       allowSelfRegistration: readBool('ALLOW_SELF_REGISTRATION', fallback: true),
       bootstrapAdminEmails: readEmails('BOOTSTRAP_ADMIN_EMAILS').toSet(),
-      dutyGuardPhones: readPhones('DUTY_GUARD_PHONES'),
       dutyHotline: hotlineRaw,
       campusName: read('CAMPUS_NAME') ?? 'Trường Đại học',
       defaultBuildings: defaultBuildings,
       trustProxy: readBool('TRUST_PROXY', fallback: false),
-      warnings: warnings,
     );
     if (problems.isNotEmpty) throw ConfigException(problems);
     return config;

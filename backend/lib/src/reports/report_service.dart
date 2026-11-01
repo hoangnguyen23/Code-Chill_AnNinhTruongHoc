@@ -3,12 +3,32 @@ import 'package:campus_core/campus_core.dart';
 import '../data/models.dart';
 import '../data/repositories.dart';
 import '../http/api_exception.dart';
-import '../notifications/notification_gateway.dart';
 import '../notifications/notification_service.dart';
 
+/// Chi tiết báo cáo trả cho app. [reporter] là `null` khi người xem không được biết người báo.
+class ReportDetail {
+  const ReportDetail({required this.report, required this.events, this.reporter});
+
+  final ReportRecord report;
+  final List<ReportEvent> events;
+  final ReporterPrivate? reporter;
+
+  Map<String, Object?> toApiJson() => {
+        'report': report.toDetailJson(),
+        'events': [
+          for (final (i, e) in events.indexed) {'id': '$i', ...e.toApiJson()},
+        ],
+        'reporter': reporter?.toApiJson(),
+      };
+}
+
+
 /// Nghiệp vụ báo cáo sự cố. Mọi thao tác ghi đều đi qua đây để kiểm tra quyền, kiểm tra dữ
-/// liệu và gửi thông báo nhất quán (client không được ghi trực tiếp vào Firestore).
+/// liệu và gửi thông báo nhất quán (client chỉ gọi API, không truy cập CSDL).
 class ReportService {
+  static const listLimit = 300;
+  static const sinceLimit = 1000;
+
   ReportService({
     required ReportRepository reports,
     required UserRepository users,
@@ -81,7 +101,7 @@ class ReportService {
     return (report, summary);
   }
 
-  Future<(ReportRecord, SendResult?)> changeStatus(
+  Future<ReportRecord> changeStatus(
     UserRecord actor,
     String reportId, {
     required ReportStatus to,
@@ -130,12 +150,12 @@ class ReportService {
         ),
       );
     });
-    final zalo = await _notifications.statusChanged(next, reporter, note: trimmedNote);
-    return (next, zalo);
+    await _notifications.statusChanged(next, reporter, note: trimmedNote);
+    return next;
   }
 
   /// Phân công. Nếu báo cáo còn "Đã gửi" thì chuyển sang "Đã tiếp nhận" và báo người báo.
-  Future<(ReportRecord, SendResult?)> assign(UserRecord actor, String reportId, String targetUid) async {
+  Future<ReportRecord> assign(UserRecord actor, String reportId, String targetUid) async {
     final target = await _users.byId(targetUid);
     if (target == null || !target.active || !target.role.isStaff) {
       throw ApiException.badRequest('Chỉ giao được cho bảo vệ hoặc quản trị đang hoạt động.');
@@ -174,8 +194,34 @@ class ReportService {
       );
     });
     await _notifications.assigned(next, target);
-    final zalo = statusChanged ? await _notifications.statusChanged(next, reporter) : null;
-    return (next, zalo);
+    if (statusChanged) await _notifications.statusChanged(next, reporter);
+    return next;
+  }
+
+  /// Chi tiết một báo cáo cho [actor]. Người báo thật chỉ có với quản trị và chính người báo.
+  Future<ReportDetail> detail(UserRecord actor, String reportId) async {
+    final report = await _reports.byId(reportId);
+    final reporter = await _reports.reporterOf(reportId);
+    if (report == null || reporter == null) throw ApiException.notFound('Không tìm thấy báo cáo.');
+    final isOwner = reporter.uid == actor.uid;
+    if (!Permissions.canViewReport(actor.actor, isOwner: isOwner)) throw ApiException.forbidden();
+    return ReportDetail(
+      report: report,
+      events: await _reports.eventsOf(reportId),
+      reporter: (isOwner || actor.role == UserRole.admin) ? reporter : null,
+    );
+  }
+
+  /// Danh sách báo cáo. `mine` cho mọi người; `open`, `assigned`, `since` chỉ cho bảo vệ và quản trị.
+  Future<List<ReportRecord>> list(UserRecord actor, {required String scope, DateTime? from}) {
+    if (scope == 'mine') return _reports.listByReporter(actor.uid, limit: listLimit);
+    if (!Permissions.canViewAllReports(actor.actor)) throw ApiException.forbidden();
+    return switch (scope) {
+      'open' => _reports.listOpen(limit: listLimit),
+      'assigned' => _reports.listAssignedTo(actor.uid, limit: listLimit),
+      'since' when from != null => _reports.listSince(from, limit: sinceLimit),
+      _ => throw ApiException.validation({'scope': 'Danh sách báo cáo không hợp lệ.'}),
+    };
   }
 
   Future<void> comment(UserRecord actor, String reportId, String text) async {
@@ -214,8 +260,9 @@ class ReportService {
   ) async {
     try {
       return await _reports.mutate(id, apply);
-    } on StateError {
-      throw ApiException.notFound('Không tìm thấy báo cáo.');
+    } on StateError catch (e) {
+      if (e.message == 'report_not_found') throw ApiException.notFound('Không tìm thấy báo cáo.');
+      throw ApiException.conflict('Báo cáo đang được cập nhật. Hãy thử lại.', code: 'write_conflict');
     }
   }
 

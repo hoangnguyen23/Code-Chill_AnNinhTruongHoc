@@ -5,191 +5,63 @@ import 'package:campus_core/campus_core.dart';
 
 import '../data/models.dart';
 import '../data/repositories.dart';
-import 'notification_gateway.dart';
 import 'push_service.dart';
-import 'zalo/zalo_templates.dart';
 
 /// Kết quả thông báo khi có báo cáo mới, trả về cho app hiển thị ngay.
 class ReportCreatedSummary {
-  const ReportCreatedSummary({
-    required this.reporterConfirmation,
-    required this.guardsTotal,
-    required this.guardsAlerted,
-    required this.guardFailures,
-    required this.pushDelivered,
-    this.pending = false,
-  });
+  const ReportCreatedSummary({required this.pushDelivered});
 
-  final SendResult? reporterConfirmation;
-  final int guardsTotal;
-  final int guardsAlerted;
-  final List<SendResult> guardFailures;
+  /// Số thiết bị (bảo vệ, quản trị) đã nhận thông báo đẩy.
   final int pushDelivered;
 
-  /// Quá thời gian chờ: tin vẫn đang được gửi ở nền và sẽ có trong nhật ký.
-  final bool pending;
-
-  Map<String, Object?> toJson() => {
-    'reporterConfirmation': reporterConfirmation?.toJson(),
-    'guardsTotal': guardsTotal,
-    'guardsAlerted': guardsAlerted,
-    'guardFailures': guardFailures
-        .map((r) => {'recipient': r.recipientMasked, 'message': r.userMessage, 'errorCode': r.errorCode})
-        .toList(),
-    'pushDelivered': pushDelivered,
-    'pending': pending,
-  };
+  Map<String, Object?> toJson() => {'pushDelivered': pushDelivered};
 }
 
-/// Điều phối thông báo theo sự kiện nghiệp vụ: Zalo (qua [NotificationGateway]) song song FCM.
+/// Điều phối thông báo đẩy (FCM) theo sự kiện nghiệp vụ.
 ///
 /// Các phương thức KHÔNG ném lỗi: chúng chạy sau khi dữ liệu đã được lưu, nên lỗi gửi tin
 /// không được làm API báo thất bại (người dùng sẽ gửi lại và tạo báo cáo trùng).
 class NotificationService {
   NotificationService({
-    required NotificationGateway gateway,
     required PushService push,
     required UserRepository users,
-    required List<VietnamPhone> extraDutyPhones,
-    this.waitLimit = const Duration(seconds: 20),
-  }) : _gateway = gateway,
-       _push = push,
-       _users = users,
-       _extraDutyPhones = extraDutyPhones;
+    this.waitLimit = const Duration(seconds: 5),
+  })  : _push = push,
+        _users = users;
 
-  final NotificationGateway _gateway;
   final PushService _push;
   final UserRepository _users;
-  final List<VietnamPhone> _extraDutyPhones;
+
+  /// Thời gian tối đa API chờ gửi push; quá thì vẫn gửi nốt ở nền.
   final Duration waitLimit;
 
-  /// Zalo chưa cấu hình: chỉ gửi push, không tạo kết quả Zalo thất bại cho người dùng xem.
-  bool get _zaloOn => _gateway.mode != 'off';
-
   Future<ReportCreatedSummary> reportCreated(ReportRecord report, ReporterPrivate reporter) async {
-    final createdText = formatVietnamDateTime(report.createdAt);
-    // Không đọc được danh sách bảo vệ vẫn phải gửi xác nhận cho người báo và báo số trực trong .env.
     final staff = await _safe(_users.listStaff, const <UserRecord>[], 'đọc danh sách bảo vệ');
-
-    // Người báo chưa nhập số điện thoại thì không có tin Zalo xác nhận (vẫn thấy kết quả trong app).
-    final reporterPhone = _zaloOn ? reporter.phone : null;
-    final confirmation = reporterPhone == null
-        ? Future<SendResult?>.value()
-        : _gateway.send(
-            TemplateMessage(
-              recipient: reporterPhone,
-              template: ZaloTemplateKey.reportReceived,
-              purpose: NotificationPurpose.reportReceived,
-              reportId: report.id,
-              data: {
-                'customer_name': reporter.displayName.isEmpty ? 'Bạn' : reporter.displayName,
-                'report_code': report.code,
-                'incident_type': report.type.label,
-                'location': report.locationText,
-                'created_time': createdText,
-              },
-            ),
-          );
-
-    // Bảo vệ đang trực trong app + số trực cố định trong .env, bỏ trùng và bỏ chính người báo.
-    final recipients = <VietnamPhone, String>{};
-    for (final g in staff.where((u) => _zaloOn && u.role == UserRole.guard && u.onDuty)) {
-      final phone = g.phone;
-      if (phone != null) recipients[phone] = g.profileComplete ? g.displayName : 'Bảo vệ trực';
-    }
-    for (final p in _zaloOn ? _extraDutyPhones : const <VietnamPhone>[]) {
-      recipients.putIfAbsent(p, () => 'Bảo vệ trực');
-    }
-    recipients.remove(reporter.phone);
-
-    final alerts = [
-      for (final entry in recipients.entries)
-        _gateway.send(
-          TemplateMessage(
-            recipient: entry.key,
-            template: ZaloTemplateKey.guardAlert,
-            purpose: NotificationPurpose.guardAlert,
-            reportId: report.id,
-            data: {
-              'guard_name': entry.value,
-              'report_code': report.code,
-              'incident_type': report.type.label,
-              'severity': report.severity.label,
-              'location': report.locationText,
-              'reported_time': createdText,
-            },
-          ),
-        ),
-    ];
-
-    final push = _pushToUsers(
-      staff.where((u) => u.uid != reporter.uid).toList(),
+    // Sự cố thường báo quản trị và bảo vệ đang trực; khẩn cấp báo mọi bảo vệ, kể cả đang nghỉ ca.
+    final targets = staff.where((u) => u.uid != reporter.uid && (report.emergency || u.onDuty || u.role == UserRole.admin));
+    final delivered = await _pushToUsers(
+      targets.toList(),
       PushMessage(
         title: report.emergency ? 'KHẨN CẤP: ${report.type.label}' : 'Sự cố mới: ${report.type.label}',
         body: '${report.code}, ${report.locationText}',
         data: {'type': 'report', 'reportId': report.id},
         urgent: true,
       ),
-    );
-
-    try {
-      final results = await Future.wait<SendResult?>([confirmation, ...alerts]).timeout(waitLimit);
-      final delivered = await push.timeout(const Duration(seconds: 5), onTimeout: () => 0);
-      final guardResults = results.skip(1).whereType<SendResult>().toList();
-      return ReportCreatedSummary(
-        reporterConfirmation: results.first,
-        guardsTotal: guardResults.length,
-        guardsAlerted: guardResults.where((r) => r.success).length,
-        guardFailures: guardResults.where((r) => !r.success).toList(),
-        pushDelivered: delivered,
-      );
-    } on TimeoutException {
-      return ReportCreatedSummary(
-        reporterConfirmation: null,
-        guardsTotal: recipients.length,
-        guardsAlerted: 0,
-        guardFailures: const [],
-        pushDelivered: 0,
-        pending: true,
-      );
-    }
+    ).timeout(waitLimit, onTimeout: () => 0);
+    return ReportCreatedSummary(pushDelivered: delivered);
   }
 
-  /// Báo trạng thái mới cho người báo qua Zalo và push.
-  Future<SendResult?> statusChanged(ReportRecord report, ReporterPrivate reporter, {String? note}) async {
+  /// Báo trạng thái mới cho người báo.
+  Future<void> statusChanged(ReportRecord report, ReporterPrivate reporter, {String? note}) async {
     final reporterUser = await _safe(() => _users.byId(reporter.uid), null, 'đọc hồ sơ người báo');
-    unawaited(
-      _pushToUsers(
-        [?reporterUser],
-        PushMessage(
-          title: 'Báo cáo ${report.code}: ${report.status.label}',
-          body: (note == null || note.isEmpty) ? 'Bấm để xem chi tiết xử lý.' : note,
-          data: {'type': 'report', 'reportId': report.id},
-        ),
+    await _pushToUsers(
+      [?reporterUser],
+      PushMessage(
+        title: 'Báo cáo ${report.code}: ${report.status.label}',
+        body: (note == null || note.isEmpty) ? 'Bấm để xem chi tiết xử lý.' : note,
+        data: {'type': 'report', 'reportId': report.id},
       ),
-    );
-    final reporterPhone = _zaloOn ? reporter.phone : null;
-    if (reporterPhone == null) return null;
-    try {
-      return await _gateway
-          .send(
-            TemplateMessage(
-              recipient: reporterPhone,
-              template: ZaloTemplateKey.statusUpdate,
-              purpose: NotificationPurpose.statusUpdate,
-              reportId: report.id,
-              data: {
-                'customer_name': reporter.displayName.isEmpty ? 'Bạn' : reporter.displayName,
-                'report_code': report.code,
-                'status': report.status.label,
-                'updated_time': formatVietnamDateTime(report.updatedAt),
-              },
-            ),
-          )
-          .timeout(waitLimit);
-    } on TimeoutException {
-      return null;
-    }
+    ).timeout(waitLimit, onTimeout: () => 0);
   }
 
   Future<void> assigned(ReportRecord report, UserRecord assignee) => _pushToUsers(
@@ -215,7 +87,7 @@ class NotificationService {
       final staff = await _safe(_users.listStaff, const <UserRecord>[], 'đọc danh sách bảo vệ');
       targets = report.assigneeUid != null
           ? staff.where((u) => u.uid == report.assigneeUid).toList()
-          : staff.where((u) => u.role == UserRole.guard && u.onDuty).toList();
+          : staff.where((u) => u.onDuty || u.role == UserRole.admin).toList();
     } else {
       targets = [?await _safe(() => _users.byId(reporter.uid), null, 'đọc hồ sơ người báo')];
     }

@@ -25,15 +25,7 @@ class FakeReportRepository implements ReportRepository {
     submitted = draft;
     final error = failWith;
     if (error != null) throw error;
-    return const SubmitReportResult(
-      id: 'r1',
-      code: 'SC-261019-K7Q4',
-      reporterConfirmation: ZaloDelivery(success: true),
-      guardsTotal: 2,
-      guardsAlerted: 2,
-      guardFailureMessages: [],
-      pending: false,
-    );
+    return const SubmitReportResult(id: 'r1', code: 'SC-261019-K7Q4', pushDelivered: 2);
   }
 
   @override
@@ -93,7 +85,6 @@ void main() {
             campusName: 'Trường thử nghiệm',
             hotline: '0243 868 1234',
             buildings: ['Toà A1', 'Thư viện', 'Bãi xe'],
-            zaloMode: 'development',
           ),
         ),
         reportRepositoryProvider.overrideWithValue(repo),
@@ -131,7 +122,7 @@ void main() {
     expect(find.text(severityHint(Severity.high)), findsOneWidget);
   });
 
-  testWidgets('điền đủ và gửi: gửi đúng dữ liệu, hiện mã sự cố và kết quả Zalo', (tester) async {
+  testWidgets('điền đủ và gửi: gửi đúng dữ liệu, hiện mã sự cố và kết quả thông báo', (tester) async {
     await pumpScreen(tester);
 
     await tester.tap(find.text('Trộm cắp'));
@@ -161,8 +152,7 @@ void main() {
 
     expect(find.text('Đã gửi báo cáo'), findsOneWidget);
     expect(find.text('SC-261019-K7Q4'), findsOneWidget);
-    expect(find.text('Đã gửi tin Zalo xác nhận tới số của bạn.'), findsOneWidget);
-    expect(find.text('Đã báo Zalo cho 2/2 bảo vệ trực.'), findsOneWidget);
+    expect(find.text('Đã báo cho bảo vệ và quản trị trên ứng dụng (2 thiết bị).'), findsOneWidget);
 
     await tester.tap(find.text('Xem báo cáo'));
     await tester.pumpAndSettle();

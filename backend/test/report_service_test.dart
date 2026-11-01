@@ -6,14 +6,22 @@ import 'support/fakes.dart';
 
 class _FlakyUsers extends MemoryUserRepository {
   @override
-  Future<List<UserRecord>> listStaff() => throw StateError('Firestore unavailable');
+  Future<List<UserRecord>> listStaff() => throw StateError('CSDL không truy cập được');
+}
+
+class _ConflictReports extends MemoryReportRepository {
+  @override
+  Future<(ReportRecord, ReporterPrivate)> mutate(
+    String id,
+    (ReportRecord, ReportEvent?) Function(ReportRecord current, ReporterPrivate reporter) apply,
+  ) =>
+      throw StateError('report_write_conflict');
 }
 
 void main() {
   late TestClock clock;
   late MemoryUserRepository users;
   late MemoryReportRepository reports;
-  late RecordingGateway gateway;
   late RecordingPushService push;
   late ReportService service;
   late UserRecord student, guardOnDuty, guardOff, admin;
@@ -22,7 +30,6 @@ void main() {
     clock = TestClock(DateTime.utc(2026, 10, 19, 7));
     users = MemoryUserRepository();
     reports = MemoryReportRepository();
-    gateway = RecordingGateway();
     push = RecordingPushService();
     student = users.seed(phone: '0912345678', name: 'Trần Minh Khoa', tokens: ['tok-student']);
     guardOnDuty = users.seed(phone: '0987654321', name: 'Lê Văn Hùng', role: UserRole.guard, onDuty: true, tokens: ['tok-g1']);
@@ -32,12 +39,7 @@ void main() {
       reports: reports,
       users: users,
       clock: clock.call,
-      notifications: NotificationService(
-        gateway: gateway,
-        push: push,
-        users: users,
-        extraDutyPhones: [VietnamPhone.parse('0933444555')],
-      ),
+      notifications: NotificationService(push: push, users: users),
     );
   });
 
@@ -53,25 +55,23 @@ void main() {
         emergency: emergency,
       );
 
-  test('tạo báo cáo: lưu trạng thái Đã gửi, mã sự cố, gửi Zalo xác nhận và cảnh báo bảo vệ trực', () async {
+  test('tạo báo cáo: lưu trạng thái Đã gửi, có mã sự cố, chỉ báo bảo vệ đang trực và quản trị', () async {
     final (report, summary) = await service.create(student, draft());
     expect(report.status, ReportStatus.submitted);
     expect(reportCodePattern.hasMatch(report.code), isTrue);
 
-    final confirm = gateway.sent.firstWhere((m) => m.template == ZaloTemplateKey.reportReceived);
-    expect(confirm.recipient, student.phone);
-    expect(confirm.data['report_code'], report.code);
-    expect(confirm.data['customer_name'], 'Trần Minh Khoa');
+    final (tokens, message) = push.sent.single;
+    expect(tokens.toSet(), {'tok-g1', 'tok-admin'}, reason: 'bảo vệ nghỉ ca không bị làm phiền');
+    expect(message.urgent, isTrue);
+    expect(message.data['reportId'], report.id);
+    expect(summary.pushDelivered, 2);
+  });
 
-    final alerts = gateway.sent.where((m) => m.template == ZaloTemplateKey.guardAlert).toList();
-    expect(alerts.map((m) => m.recipient.local).toSet(), {'0987654321', '0933444555'},
-        reason: 'bảo vệ đang trực + số trực trong .env, không gửi bảo vệ nghỉ ca');
-    expect(alerts.first.data['severity'], 'Cao');
-    expect(summary.guardsAlerted, 2);
-
-    final staffPush = push.sent.single;
-    expect(staffPush.$1.toSet(), {'tok-g1', 'tok-g2', 'tok-admin'});
-    expect(staffPush.$2.urgent, isTrue);
+  test('sự cố khẩn cấp báo mọi bảo vệ, kể cả đang nghỉ ca', () async {
+    await service.create(student, draft(emergency: true));
+    final (tokens, message) = push.sent.single;
+    expect(tokens.toSet(), {'tok-g1', 'tok-g2', 'tok-admin'});
+    expect(message.title, startsWith('KHẨN CẤP'));
   });
 
   test('báo cáo ẩn danh: không lưu tên/số người báo trong tài liệu bảo vệ đọc được', () async {
@@ -81,45 +81,21 @@ void main() {
     expect(report.reporterPhone, isNull);
     expect(reports.events[report.id]!.single.actorName, 'Người báo (ẩn danh)');
     expect(reports.events[report.id]!.single.actorUid, isNull);
-    // Người báo vẫn nhận xác nhận Zalo và vẫn theo dõi được báo cáo của mình.
+    // Người báo vẫn theo dõi được báo cáo của mình.
     expect(reports.privates[report.id]!.phone, student.phone);
     expect(reports.userIndex[student.uid], contains(report.id));
   });
 
-  test('người báo và bảo vệ chưa có số điện thoại: bỏ qua Zalo, vẫn push và vẫn lưu báo cáo', () async {
+  test('người dùng chưa có số điện thoại vẫn gửi và nhận thông báo bình thường', () async {
     final noPhone = users.seed(email: 'khong.so@gmail.com', name: 'Vũ An', tokens: ['tok-np']);
-    users.seed(name: 'Bảo vệ chưa có số', role: UserRole.guard, onDuty: true, tokens: ['tok-g3']);
     final (report, summary) = await service.create(noPhone, draft());
     expect(report.reporterPhone, isNull);
     expect(reports.privates[report.id]!.email!.value, 'khong.so@gmail.com');
-    expect(gateway.sent.where((m) => m.template == ZaloTemplateKey.reportReceived), isEmpty);
-    expect(summary.reporterConfirmation, isNull);
-    expect(gateway.sent.map((m) => m.recipient.local).toSet(), {'0987654321', '0933444555'});
-    expect(push.sent.single.$1, contains('tok-g3'));
+    expect(summary.pushDelivered, 2);
 
-    final (_, sent) = await service.changeStatus(guardOnDuty, report.id, to: ReportStatus.received);
-    expect(sent, isNull, reason: 'không có số thì không gửi Zalo cập nhật trạng thái');
-  });
-
-  test('Zalo tắt: không gửi Zalo, không báo lỗi Zalo, vẫn push cho bảo vệ và quản trị', () async {
-    final off = ReportService(
-      reports: reports,
-      users: users,
-      clock: clock.call,
-      notifications: NotificationService(
-        gateway: const DisabledNotificationGateway(),
-        push: push,
-        users: users,
-        extraDutyPhones: [VietnamPhone.parse('0933444555')],
-      ),
-    );
-    final (report, summary) = await off.create(student, draft());
-    expect(summary.reporterConfirmation, isNull);
-    expect(summary.guardsTotal, 0);
-    expect(summary.guardFailures, isEmpty);
-    expect(summary.pushDelivered, 3);
-    final (_, sent) = await off.changeStatus(guardOnDuty, report.id, to: ReportStatus.received);
-    expect(sent, isNull);
+    push.sent.clear();
+    await service.changeStatus(guardOnDuty, report.id, to: ReportStatus.received);
+    expect(push.sent.single.$1, ['tok-np']);
   });
 
   test('báo cáo khẩn cấp: mức Khẩn cấp, chấp nhận không mô tả nếu có GPS', () async {
@@ -144,17 +120,15 @@ void main() {
     );
   });
 
-  test('bảo vệ tiếp nhận: tự nhận việc, người báo nhận Zalo cập nhật trạng thái', () async {
+  test('bảo vệ tiếp nhận: tự nhận việc, người báo nhận thông báo cập nhật trạng thái', () async {
     final (report, _) = await service.create(student, draft());
-    gateway.sent.clear();
-    final (updated, zalo) = await service.changeStatus(guardOnDuty, report.id, to: ReportStatus.received);
+    push.sent.clear();
+    final updated = await service.changeStatus(guardOnDuty, report.id, to: ReportStatus.received);
     expect(updated.status, ReportStatus.received);
     expect(updated.assigneeUid, guardOnDuty.uid);
-    expect(zalo!.success, isTrue);
-    final msg = gateway.sent.single;
-    expect(msg.template, ZaloTemplateKey.statusUpdate);
-    expect(msg.recipient, student.phone);
-    expect(msg.data['status'], 'Đã tiếp nhận');
+    final (tokens, message) = push.sent.single;
+    expect(tokens, ['tok-student']);
+    expect(message.title, contains('Đã tiếp nhận'));
     final event = reports.events[report.id]!.last;
     expect(event.fromStatus, ReportStatus.submitted);
     expect(event.toStatus, ReportStatus.received);
@@ -172,7 +146,7 @@ void main() {
       throwsA(isA<ApiException>().having((e) => e.message, 'message', contains('Lê Văn Hùng'))),
     );
     // Quản trị vẫn đóng được.
-    final (closed, _) = await service.changeStatus(admin, report.id, to: ReportStatus.resolved, note: 'Đã tìm thấy xe');
+    final closed = await service.changeStatus(admin, report.id, to: ReportStatus.resolved, note: 'Đã tìm thấy xe');
     expect(closed.closedAt, clock.now);
     expect(closed.lastNote, 'Đã tìm thấy xe');
   });
@@ -192,11 +166,11 @@ void main() {
   test('quản trị phân công: báo cáo chuyển Đã tiếp nhận, bảo vệ được giao nhận push', () async {
     final (report, _) = await service.create(student, draft());
     push.sent.clear();
-    final (assigned, zalo) = await service.assign(admin, report.id, guardOff.uid);
+    final assigned = await service.assign(admin, report.id, guardOff.uid);
     expect(assigned.assigneeUid, guardOff.uid);
     expect(assigned.status, ReportStatus.received);
-    expect(zalo, isNotNull);
     expect(push.sent.any((p) => p.$1.contains('tok-g2')), isTrue);
+    expect(push.sent.any((p) => p.$1.contains('tok-student')), isTrue, reason: 'người báo biết đã được tiếp nhận');
   });
 
   test('bảo vệ không giao việc cho người khác; không giao cho người báo', () async {
@@ -218,30 +192,23 @@ void main() {
   });
 
   test('token push hết hiệu lực được dọn khỏi hồ sơ', () async {
-    push.invalid.add('tok-g2');
+    push.invalid.add('tok-g1');
     await service.create(student, draft());
-    expect(users.byUid[guardOff.uid]!.fcmTokens, isEmpty);
+    expect(users.byUid[guardOnDuty.uid]!.fcmTokens, isEmpty);
   });
 
-  test('đọc danh sách bảo vệ lỗi: báo cáo vẫn tạo thành công, vẫn gửi xác nhận và báo số trực trong .env', () async {
+  test('đọc danh sách bảo vệ lỗi: báo cáo vẫn tạo thành công', () async {
     final flaky = _FlakyUsers();
     final reporterUser = flaky.seed(phone: '0912345678', name: 'Trần Minh Khoa');
     final svc = ReportService(
       reports: reports,
       users: flaky,
       clock: clock.call,
-      notifications: NotificationService(
-        gateway: gateway,
-        push: push,
-        users: flaky,
-        extraDutyPhones: [VietnamPhone.parse('0933444555')],
-      ),
+      notifications: NotificationService(push: push, users: flaky),
     );
     final (report, summary) = await svc.create(reporterUser, draft());
     expect(reports.reports[report.id], isNotNull);
-    expect(summary.reporterConfirmation!.success, isTrue);
-    expect(gateway.sent.where((m) => m.template == ZaloTemplateKey.guardAlert).map((m) => m.recipient.local),
-        ['0933444555']);
+    expect(summary.pushDelivered, 0);
   });
 
   test('bảo vệ gửi ẩn danh: lịch sử không lộ vai trò bảo vệ', () async {
@@ -249,6 +216,57 @@ void main() {
     final created = reports.events[report.id]!.single;
     expect(created.actorRole, UserRole.reporter);
     expect(created.actorUid, isNull);
+  });
+
+  test('người báo nhắn khi chưa ai nhận việc: bảo vệ trực và quản trị đều nhận, bảo vệ nghỉ ca thì không', () async {
+    final (report, _) = await service.create(student, draft());
+    push.sent.clear();
+    await service.comment(student, report.id, 'Xe màu xanh');
+    expect(push.sent.single.$1.toSet(), {'tok-g1', 'tok-admin'});
+  });
+
+  test('ghi xung đột quá nhiều lần báo 409, không báo "không tìm thấy"', () async {
+    final svc = ReportService(
+      reports: _ConflictReports(),
+      users: users,
+      clock: clock.call,
+      notifications: NotificationService(push: push, users: users),
+    );
+    await expectLater(
+      svc.changeStatus(admin, 'r1', to: ReportStatus.received),
+      throwsA(isA<ApiException>().having((e) => e.statusCode, 'status', 409)),
+    );
+  });
+
+  test('xem chi tiết: người lạ bị chặn; bảo vệ không thấy người báo; quản trị và chính chủ thấy', () async {
+    final (report, _) = await service.create(student, draft(anonymous: true));
+    final stranger = users.seed(phone: '0966000222', name: 'Người lạ');
+
+    await expectLater(
+      service.detail(stranger, report.id),
+      throwsA(isA<ApiException>().having((e) => e.statusCode, 'status', 403)),
+    );
+    final forGuard = (await service.detail(guardOnDuty, report.id)).toApiJson();
+    expect(forGuard['reporter'], isNull);
+    expect((forGuard['report']! as Map)['reporterUid'], isNull);
+    expect((await service.detail(admin, report.id)).reporter?.uid, student.uid);
+    final own = (await service.detail(student, report.id)).toApiJson();
+    expect((own['reporter']! as Map)['uid'], student.uid);
+    expect(own['events'], hasLength(1));
+  });
+
+  test('danh sách: người báo chỉ xem báo cáo của mình, kể cả ẩn danh', () async {
+    final (mine, _) = await service.create(student, draft(anonymous: true));
+    await service.create(guardOff, draft());
+    expect((await service.list(student, scope: 'mine')).map((r) => r.id), [mine.id]);
+    for (final scope in ['open', 'assigned', 'since']) {
+      await expectLater(
+        () => service.list(student, scope: scope, from: clock.now),
+        throwsA(isA<ApiException>().having((e) => e.statusCode, 'status', 403)),
+      );
+    }
+    expect(await service.list(admin, scope: 'open'), hasLength(2));
+    await expectLater(() => service.list(admin, scope: 'la'), throwsA(isA<ApiException>()));
   });
 
   test('đổi trạng thái không kèm ghi chú thì xoá ghi chú cũ', () async {

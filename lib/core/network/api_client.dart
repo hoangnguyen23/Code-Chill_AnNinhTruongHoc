@@ -10,19 +10,30 @@ import 'api_error.dart';
 /// Lấy Firebase ID token hiện tại (null nếu chưa đăng nhập).
 typedef IdTokenProvider = Future<String?> Function();
 
-/// Gọi backend dart_frog. App không chứa secret Zalo nào; mọi thao tác ghi đều qua đây.
+/// Gọi backend dart_frog. App không chứa secret nào; mọi thao tác ghi đều qua đây.
 class ApiClient {
   ApiClient({
     required this.baseUrl,
     required this.idToken,
+    this.onSessionExpired,
     http.Client? client,
     this.timeout = AppConfig.requestTimeout,
   }) : _client = client ?? http.Client();
 
   final String baseUrl;
   final IdTokenProvider idToken;
+
+  /// Gọi khi backend báo phiên hết hạn hoặc đã bị thu hồi (đổi mật khẩu, tài khoản bị xoá).
+  final Future<void> Function()? onSessionExpired;
   final http.Client _client;
   final Duration timeout;
+
+  final _changes = StreamController<void>.broadcast();
+
+  /// Phát khi dữ liệu có thể đã đổi, để các màn hình đang mở tải lại ngay (xem `pollApi`).
+  Stream<void> get changes => _changes.stream;
+
+  void notifyChanged() => _changes.add(null);
 
   Future<Map<String, Object?>> get(String path, {bool auth = true}) =>
       _send('GET', path, auth: auth);
@@ -84,7 +95,9 @@ class ApiClient {
     } on FormatException {
       throw ApiError.unexpected(response.statusCode);
     }
+    if (response.statusCode == 401 && auth) unawaited(onSessionExpired?.call());
     if (response.statusCode >= 400) throw ApiError.fromBody(response.statusCode, decoded);
+    if (method != 'GET' && auth) notifyChanged();
     if (decoded is Map<String, Object?>) return decoded;
     throw ApiError.unexpected(response.statusCode);
   }

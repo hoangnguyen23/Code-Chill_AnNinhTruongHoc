@@ -3,11 +3,20 @@ import 'dart:io';
 import 'package:campus_safety_backend/backend.dart';
 import 'package:dart_frog/dart_frog.dart';
 
+/// GET /walks?scope=mine|active : lượt đang đi của mình, hoặc mọi lượt (bảo vệ, quản trị).
 /// POST /walks {destination, minutes, latitude?, longitude?, accuracy?} : bắt đầu "Đi cùng tôi".
-/// Lượt đang đi app đọc thẳng từ Firestore `walks` (chính chủ và bảo vệ/quản trị).
 Future<Response> onRequest(RequestContext context) async {
-  ensureMethod(context, {HttpMethod.post});
+  ensureMethod(context, {HttpMethod.get, HttpMethod.post});
   final services = context.read<AppServices>();
+  if (context.request.method == HttpMethod.get) {
+    final user = context.read<UserRecord>();
+    if (context.request.uri.queryParameters['scope'] == 'active') {
+      if (!user.role.isStaff) throw ApiException.forbidden();
+      final walks = await services.walks.listActive();
+      return Response.json(body: {'walks': [for (final w in walks) w.toDetailJson()]});
+    }
+    return Response.json(body: {'walk': (await services.walks.activeFor(user.uid))?.toDetailJson()});
+  }
   final body = await readJsonObject(context.request);
   services.limits.check(services.limits.walks, context.read<UserRecord>().uid, 'bắt đầu Đi cùng tôi');
   final walk = await services.walks.start(

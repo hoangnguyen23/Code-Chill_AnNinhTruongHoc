@@ -6,7 +6,8 @@ import 'app_config.dart';
 /// Địa chỉ backend đang dùng. Mặc định lấy từ `--dart-define=API_BASE_URL`; người dùng có thể đổi
 /// ngay trong app (màn đăng nhập) khi IP Wi-Fi của máy chạy backend thay đổi, không cần build lại.
 class ServerUrlController extends Notifier<String> {
-  static const _key = 'api_base_url';
+  /// Đổi tên khoá để máy đã lưu IP laptop trước đây tự về backend đã deploy.
+  static const _key = 'api_base_url_v2';
 
   @override
   String build() {

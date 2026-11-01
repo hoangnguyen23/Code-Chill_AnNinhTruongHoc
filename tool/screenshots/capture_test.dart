@@ -12,11 +12,8 @@ import 'package:campus_safety/core/services/location_service.dart';
 import 'package:campus_safety/core/theme/app_theme.dart';
 import 'package:campus_safety/core/widgets/offline_banner.dart';
 import 'package:campus_safety/features/admin/data/admin_repository.dart';
-import 'package:campus_safety/features/admin/domain/admin_models.dart';
 import 'package:campus_safety/features/admin/presentation/dashboard_screen.dart';
 import 'package:campus_safety/features/admin/presentation/manage_screen.dart';
-import 'package:campus_safety/features/admin/presentation/send_logs_screen.dart';
-import 'package:campus_safety/features/admin/presentation/zalo_test_screen.dart';
 import 'package:campus_safety/features/auth/application/session.dart';
 import 'package:campus_safety/features/auth/domain/app_user.dart';
 import 'package:campus_safety/features/auth/domain/auth_repository.dart';
@@ -104,7 +101,6 @@ const campus = CampusInfo(
   campusName: 'Trường Đại học Bách khoa',
   hotline: '0243 868 1234',
   buildings: ['Toà A1', 'Toà A2', 'Thư viện', 'Bãi xe', 'Ký túc xá'],
-  zaloMode: 'development',
 );
 
 class _FixedLocation implements LocationService {
@@ -125,10 +121,8 @@ List<Override> overrides(AppUser user) => [
       openReportsProvider.overrideWith((ref) => Stream.value(reports.where((r) => r.status.isOpen).toList())),
       reportsSinceProvider.overrideWith((ref, _) => Stream.value(reports)),
       assignedToMeProvider.overrideWith((ref) => Stream.value(reports.sublist(1, 3))),
-      reportProvider.overrideWith((ref, id) => Stream.value(reports.firstWhere((r) => r.id == id))),
-      reporterContactProvider.overrideWith((ref, id) => Stream.value(null)),
-      reportEventsProvider.overrideWith(
-        (ref, id) => Stream.value([
+      reportDetailProvider.overrideWith(
+        (ref, id) => Stream.value(ReportDetail(report: reports.firstWhere((r) => r.id == id), events: [
           ReportEventItem(
             id: 'e1',
             type: ReportEventType.created,
@@ -146,64 +140,9 @@ List<Override> overrides(AppUser user) => [
             actorRole: UserRole.reporter,
             note: 'Nhóm đó đang đi về phía cầu thang bộ phía tây.',
           ),
-        ]),
+        ])),
       ),
       staffProvider.overrideWith((ref) => Stream.value([person(UserRole.guard, 'Lê Văn Hùng', onDuty: true)])),
-      zaloStatusProvider.overrideWith(
-        (ref) async => ZaloStatus.fromJson({
-          'mode': 'development',
-          'warnings': ['Chưa cấu hình ZALO_TEMPLATE_GUARD_ALERT: tin "Cảnh báo sự cố mới cho bảo vệ" sẽ không gửi được.'],
-          'token': {
-            'accessTokenValid': true,
-            'accessTokenExpiresAt': now.add(const Duration(hours: 20)).toIso8601String(),
-          },
-          'templates': [
-            {
-              'key': 'otp',
-              'title': 'Mã OTP đăng nhập',
-              'envVar': 'ZALO_TEMPLATE_OTP',
-              'configured': true,
-              'templateId': '384512',
-              'params': [
-                {'name': 'otp', 'typeLabel': 'OTP', 'maxLength': 10, 'description': 'Mã 6 chữ số', 'sample': '482915'},
-              ],
-            },
-            {
-              'key': 'guard_alert',
-              'title': 'Cảnh báo sự cố mới cho bảo vệ',
-              'envVar': 'ZALO_TEMPLATE_GUARD_ALERT',
-              'configured': false,
-              'params': [],
-            },
-          ],
-        }),
-      ),
-      sendLogsProvider.overrideWith(
-        (ref, failuresOnly) => Stream.value([
-          SendLogItem(
-            id: 'l1',
-            success: true,
-            template: 'otp',
-            recipient: '84912***678',
-            mode: 'development',
-            trackingId: 'OTPMG3K2Z1ABCDEF',
-            createdAt: now.subtract(const Duration(minutes: 3)),
-            purpose: 'otp',
-          ),
-          SendLogItem(
-            id: 'l2',
-            success: false,
-            template: 'guard_alert',
-            recipient: '84933***555',
-            mode: 'development',
-            trackingId: 'GRDMG3K2Z1XYZ123',
-            createdAt: now.subtract(const Duration(minutes: 12)),
-            purpose: 'guard_alert',
-            errorCode: -118,
-            message: 'Số điện thoại này chưa có tài khoản Zalo hoặc tài khoản đã bị vô hiệu hoá.',
-          ),
-        ]),
-      ),
     ];
 
 Future<void> loadFonts() async {
@@ -318,8 +257,6 @@ void main() {
       ));
   testWidgets('my reports', (t) => shoot(t, 'my_reports_light', shell(AppRoutes.myReports, const MyReportsScreen()), user: student));
   testWidgets('manage', (t) => shoot(t, 'manage_light', shell(AppRoutes.manage, const ManageScreen()), user: admin));
-  testWidgets('zalo test', (t) => shoot(t, 'zalo_test_light', const ZaloTestScreen(), user: admin));
-  testWidgets('logs', (t) => shoot(t, 'logs_light', const SendLogsScreen(), user: admin));
   testWidgets('settings guard', (t) => shoot(t, 'settings_guard_light', shell(AppRoutes.settings, const SettingsScreen()), user: guard));
   testWidgets('home text 200%', (t) => shoot(t, 'home_text200', shell(AppRoutes.home, const HomeScreen()), user: student, textScale: 2));
   testWidgets('queue text 200%', (t) => shoot(t, 'queue_text200', shell(AppRoutes.queue, const IncidentQueueScreen()), user: guard, textScale: 2));

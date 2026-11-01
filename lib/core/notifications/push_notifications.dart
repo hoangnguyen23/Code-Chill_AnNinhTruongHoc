@@ -8,7 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../firebase/firebase_providers.dart';
 import '../network/api_client.dart';
 
-/// Push FCM song song với tin Zalo.
+/// Thông báo đẩy FCM.
 ///
 /// - Kênh "Cảnh báo sự cố" (ưu tiên cao) cho bảo vệ/quản trị, kênh "Cập nhật báo cáo" cho người báo.
 ///   ID kênh trùng với backend (`FcmPushService`).
@@ -19,7 +19,9 @@ class PushNotifications {
       : _local = local ?? FlutterLocalNotificationsPlugin();
 
   final FirebaseMessaging _messaging;
-  final ApiClient _api;
+
+  /// Đọc mỗi lần gọi để luôn dùng địa chỉ máy chủ mới nhất.
+  final ApiClient Function() _api;
   final FlutterLocalNotificationsPlugin _local;
 
   static const urgentChannel = AndroidNotificationChannel(
@@ -87,18 +89,18 @@ class PushNotifications {
       await _messaging.requestPermission();
       // ignore: deprecated_member_use
       final token = await _messaging.getToken();
-      if (token != null) await _api.post('/me/fcm_token', {'token': token});
+      if (token != null) await _api().post('/me/fcm_token', {'token': token});
       await _tokenRefresh?.cancel();
       // ignore: deprecated_member_use
       _tokenRefresh = _messaging.onTokenRefresh.listen((t) async {
         try {
-          await _api.post('/me/fcm_token', {'token': t});
+          await _api().post('/me/fcm_token', {'token': t});
         } on Object catch (e) {
           debugPrint('Không cập nhật được FCM token: $e');
         }
       });
     } on Object catch (e) {
-      // Push là kênh phụ; Zalo vẫn hoạt động nếu push lỗi.
+      // Lỗi đăng ký push không chặn việc dùng app (dữ liệu vẫn cập nhật qua Firestore).
       debugPrint('Không đăng ký được push: $e');
     }
   }
@@ -107,13 +109,17 @@ class PushNotifications {
   Future<void> unregister() async {
     await _tokenRefresh?.cancel();
     _tokenRefresh = null;
-    // ignore: deprecated_member_use
-    final token = await _messaging.getToken();
-    if (token != null) {
-      await _api.delete('/me/fcm_token', {'token': token}).timeout(const Duration(seconds: 5));
+    try {
+      // ignore: deprecated_member_use
+      final token = await _messaging.getToken();
+      if (token != null) {
+        await _api().delete('/me/fcm_token', {'token': token}).timeout(const Duration(seconds: 5));
+      }
+    } finally {
+      // Backend không kết nối được vẫn huỷ token trên máy, để máy không nhận tin của tài khoản cũ.
+      // ignore: deprecated_member_use
+      await _messaging.deleteToken();
     }
-    // ignore: deprecated_member_use
-    await _messaging.deleteToken();
   }
 
   void _emitTap(String? reportId) {
@@ -122,6 +128,8 @@ class PushNotifications {
   }
 
   Future<void> _showForeground(RemoteMessage message) async {
+    // Có sự cố hoặc cập nhật mới: các màn đang mở tải lại ngay.
+    _api().notifyChanged();
     final n = message.notification;
     if (n == null) return;
     final urgent = n.android?.channelId == urgentChannel.id;
@@ -153,8 +161,10 @@ class PushNotifications {
   }
 }
 
+/// Không `watch` [apiClientProvider]: `initialize` chỉ chạy một lần lúc mở app, nên đổi địa chỉ máy chủ
+/// mà tạo lại provider sẽ huỷ bộ lắng nghe, app đang mở không còn hiện thông báo.
 final pushNotificationsProvider = Provider<PushNotifications>((ref) {
-  final push = PushNotifications(ref.watch(messagingProvider), ref.watch(apiClientProvider));
+  final push = PushNotifications(ref.watch(messagingProvider), () => ref.read(apiClientProvider));
   ref.onDispose(push.dispose);
   return push;
 });

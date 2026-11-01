@@ -115,7 +115,7 @@ void main() {
     final code = generateReportCode(now: DateTime.utc(2026, 10, 18, 18), random: Random(1));
     expect(code, startsWith('SC-261019-'));
     expect(reportCodePattern.hasMatch(code), isTrue);
-    expect(code.length, lessThanOrEqualTo(30), reason: 'vừa tham số "Mã số" của Zalo');
+    expect(code.length, lessThanOrEqualTo(30));
   });
 
   test('formatVietnamDateTime dài 16 ký tự', () {

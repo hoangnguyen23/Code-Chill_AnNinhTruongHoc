@@ -108,6 +108,17 @@ class WalkRecord {
         'status': status.wire,
         'reportId': reportId,
       };
+
+  /// Đầy đủ thông tin cho chính chủ và bảo vệ, quản trị.
+  Map<String, Object?> toDetailJson() => {
+        ...toApiJson(),
+        'uid': uid,
+        'displayName': displayName,
+        'phone': phone,
+        'lastLatitude': lastLatitude,
+        'lastLongitude': lastLongitude,
+        'lastLocationAt': lastLocationAt?.toUtc().toIso8601String(),
+      };
 }
 
 abstract interface class WalkRepository {
@@ -123,11 +134,11 @@ abstract interface class WalkRepository {
   /// Ghi đè toàn bộ tài liệu (tạo lượt mới, gắn mã báo cáo vào lượt đã kết thúc).
   Future<void> save(WalkRecord walk);
 
-  /// Đọc và ghi nguyên tử (transaction) khi lượt **còn đang đi**. Trả về bản mới, hoặc `null` nếu
+  /// Đọc và ghi nguyên tử (khoá lạc quan) khi lượt **còn đang đi**. Trả về bản mới, hoặc `null` nếu
   /// lượt đã kết thúc (người dùng vừa bấm tới nơi, hoặc một backend khác vừa xử lý quá giờ).
   /// [update] có thể ném lỗi để huỷ thay đổi.
   ///
-  /// Nhiều backend cùng chạy (mỗi người một laptop, chung Firestore) nên mọi thay đổi trạng thái
+  /// Có thể có nhiều backend cùng chạy trên một CSDL nên mọi thay đổi trạng thái
   /// phải đi qua đây: chỉ một backend "giành" được lượt quá giờ và tạo báo cáo khẩn cấp.
   Future<WalkRecord?> updateIfActive(String id, WalkRecord Function(WalkRecord current) update);
 }
@@ -162,6 +173,10 @@ class WalkService {
   final DateTime Function() _clock;
   Timer? _timer;
   bool _checking = false;
+
+  Future<WalkRecord?> activeFor(String uid) => _walks.activeFor(uid);
+
+  Future<List<WalkRecord>> listActive() => _walks.listActive();
 
   Future<WalkRecord> start(
     UserRecord user, {
@@ -284,15 +299,20 @@ class WalkService {
           continue;
         }
         final late = now.difference(walk.dueAt).inMinutes;
-        final done = await _raise(
-          user,
-          walk.id,
-          WalkStatus.overdue,
-          'Đi cùng tôi: quá giờ hẹn${late > 0 ? ' $late phút' : ''} mà chưa xác nhận đã tới ${walk.destination}.',
-          // Người dùng có thể vừa gia hạn ở máy khác: kiểm tra lại giờ hẹn trong transaction.
-          onlyIfDueBefore: now,
-        );
-        if (done != null) raised++;
+        // Một lượt lỗi không được chặn các lượt phía sau; lượt đó được thử lại ở lần quét sau.
+        try {
+          final done = await _raise(
+            user,
+            walk.id,
+            WalkStatus.overdue,
+            'Đi cùng tôi: quá giờ hẹn${late > 0 ? ' $late phút' : ''} mà chưa xác nhận đã tới ${walk.destination}.',
+            // Người dùng có thể vừa gia hạn ở máy khác: kiểm tra lại giờ hẹn khi ghi.
+            onlyIfDueBefore: now,
+          );
+          if (done != null) raised++;
+        } on Object catch (e) {
+          stderr.writeln('[walk] Không báo được lượt ${walk.id}: $e');
+        }
       }
       return raised;
     } on Object catch (e) {
@@ -308,7 +328,7 @@ class WalkService {
     _timer = Timer.periodic(every, (_) => unawaited(checkOverdue()));
   }
 
-  /// Giành lượt đi (đổi trạng thái trong transaction) rồi mới tạo báo cáo khẩn cấp, nên dù nhiều
+  /// Giành lượt đi (đổi trạng thái nguyên tử) rồi mới tạo báo cáo khẩn cấp, nên dù nhiều
   /// backend cùng quét thì chỉ một báo cáo được tạo. Trả về `null` nếu lượt đã được xử lý.
   Future<WalkRecord?> _raise(
     UserRecord user,
@@ -414,7 +434,7 @@ class WalkService {
   static String _clip(String s, int max) => s.length <= max ? s : s.substring(0, max);
 }
 
-/// Lượt chưa tới giờ hẹn (vừa được gia hạn): huỷ transaction, không báo quá giờ.
+/// Lượt chưa tới giờ hẹn (vừa được gia hạn): huỷ thao tác, không báo quá giờ.
 class _NotDue implements Exception {
   const _NotDue();
 }

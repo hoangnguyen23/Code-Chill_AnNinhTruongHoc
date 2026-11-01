@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'core/config/app_config.dart';
+import 'core/firebase/firebase_providers.dart';
+import 'core/network/polling.dart';
 import 'core/notifications/push_notifications.dart';
 import 'core/router/app_router.dart';
 import 'core/router/role_navigation.dart';
@@ -18,21 +20,29 @@ class CampusSafetyApp extends ConsumerStatefulWidget {
   ConsumerState<CampusSafetyApp> createState() => _CampusSafetyAppState();
 }
 
-class _CampusSafetyAppState extends ConsumerState<CampusSafetyApp> {
+class _CampusSafetyAppState extends ConsumerState<CampusSafetyApp> with WidgetsBindingObserver {
   StreamSubscription<String>? _taps;
   String? _registeredUid;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     final push = ref.read(pushNotificationsProvider);
     _taps = push.reportTaps.listen(_openReport);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _taps?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    pollingEnabled = state == AppLifecycleState.resumed;
+    if (pollingEnabled) ref.read(apiClientProvider).notifyChanged();
   }
 
   void _openReport(String reportId) {

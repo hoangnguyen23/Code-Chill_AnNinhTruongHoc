@@ -223,7 +223,7 @@ DateTime toVietnamTime(DateTime t) {
   return DateTime.utc(utc.year, utc.month, utc.day, utc.hour, utc.minute, utc.second);
 }
 
-/// Định dạng `14:05 19/10/2026` theo giờ Việt Nam (16 ký tự, vừa tham số "Thời gian" của Zalo).
+/// Định dạng `14:05 19/10/2026` theo giờ Việt Nam (16 ký tự).
 String formatVietnamDateTime(DateTime t) {
   final vn = toVietnamTime(t);
   String two(int v) => v.toString().padLeft(2, '0');

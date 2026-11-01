@@ -4,7 +4,7 @@ import 'package:campus_safety_backend/backend.dart';
 import 'package:dart_frog/dart_frog.dart';
 
 /// POST /admin/broadcasts {title, body, level, hours?} : gửi cảnh báo toàn trường (banner trong app
-/// + push tới mọi tài khoản). Danh sách cảnh báo app đọc thẳng từ Firestore `broadcasts`.
+/// + push tới mọi tài khoản). Danh sách cảnh báo ở `GET /broadcasts`.
 Future<Response> onRequest(RequestContext context) async {
   ensureMethod(context, {HttpMethod.post});
   final services = context.read<AppServices>();

@@ -5,9 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../features/admin/presentation/campus_config_screen.dart';
 import '../../features/admin/presentation/dashboard_screen.dart';
 import '../../features/admin/presentation/manage_screen.dart';
-import '../../features/admin/presentation/send_logs_screen.dart';
 import '../../features/admin/presentation/users_screen.dart';
-import '../../features/admin/presentation/zalo_test_screen.dart';
 import '../../features/auth/application/session.dart';
 import '../../features/auth/domain/auth_repository.dart';
 import '../../features/auth/presentation/blocked_screen.dart';
@@ -104,8 +102,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(path: AppRoutes.users, builder: (_, _) => const UsersScreen()),
       GoRoute(path: AppRoutes.campusConfig, builder: (_, _) => const CampusConfigScreen()),
-      GoRoute(path: AppRoutes.zaloTest, builder: (_, _) => const ZaloTestScreen()),
-      GoRoute(path: AppRoutes.sendLogs, builder: (_, _) => const SendLogsScreen()),
       GoRoute(path: AppRoutes.broadcasts, builder: (_, _) => const BroadcastComposeScreen()),
       GoRoute(
         path: AppRoutes.walk,

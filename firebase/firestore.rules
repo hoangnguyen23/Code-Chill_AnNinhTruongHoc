@@ -4,11 +4,12 @@ rules_version = '2';
 //
 // Nguyên tắc:
 // - Client CHỈ ĐỌC. Mọi thao tác ghi (tạo báo cáo, đổi trạng thái, phân công, trao đổi, hồ sơ,
-//   cấu hình) đi qua backend dart_frog dùng Admin SDK, để kiểm tra quyền và gửi Zalo/FCM nhất quán.
+//   cấu hình) đi qua backend dart_frog dùng Admin SDK, để kiểm tra quyền và gửi thông báo nhất quán.
 // - Vai trò lấy từ users/{uid}.role (reporter | guard | admin), đổi vai trò có hiệu lực ngay.
 // - Báo cáo ẩn danh: reports/{id} KHÔNG chứa tên/số người báo; thông tin thật ở
 //   reports/{id}/private/reporter, chỉ quản trị và chính người báo đọc được. Bảo vệ không đọc được.
-// - otp_challenges, email_index, system (token Zalo) không có rule nào => client bị chặn hoàn toàn.
+// - otp_challenges, email_index, username_index, credentials, report_images không có rule nào
+//   => client bị chặn hoàn toàn.
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -83,12 +84,6 @@ service cloud.firestore {
     // "Đi cùng tôi": chính chủ và bảo vệ/quản trị đọc được, chỉ backend ghi.
     match /walks/{walkId} {
       allow read: if isStaff() || (isActive() && resource.data.uid == request.auth.uid);
-      allow write: if false;
-    }
-
-    // Nhật ký gửi tin Zalo.
-    match /zalo_logs/{logId} {
-      allow read: if isAdmin();
       allow write: if false;
     }
   }

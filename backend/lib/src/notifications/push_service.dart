@@ -49,6 +49,12 @@ class FcmPushService implements PushService {
     'messaging/invalid-registration-token',
   };
 
+  /// Thư viện admin hay gộp lỗi HTTP của FCM thành `internal-error`, nên phải xem cả nội dung lỗi.
+  static bool isDeadToken(String code, String message) =>
+      _invalidCodes.contains(code) ||
+      message.contains('NotRegistered') ||
+      message.contains('not a valid FCM registration token');
+
   @override
   Future<PushResult> sendToTokens(List<String> tokens, PushMessage message) async {
     final unique = tokens.toSet().where((t) => t.isNotEmpty).toList();
@@ -75,7 +81,7 @@ class FcmPushService implements PushService {
         failed += batch.failureCount;
         for (var j = 0; j < batch.responses.length; j++) {
           final error = batch.responses[j].error;
-          if (error != null && _invalidCodes.contains(error.code)) invalid.add(chunk[j]);
+          if (error != null && isDeadToken(error.code, error.message)) invalid.add(chunk[j]);
         }
       } on Object catch (e) {
         failed += chunk.length;

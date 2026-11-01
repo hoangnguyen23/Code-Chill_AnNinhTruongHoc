@@ -38,8 +38,6 @@ abstract final class AppRoutes {
 
   static const users = '/manage/users';
   static const campusConfig = '/manage/config';
-  static const zaloTest = '/manage/zalo-test';
-  static const sendLogs = '/manage/logs';
   static const broadcasts = '/manage/broadcasts';
 }
 

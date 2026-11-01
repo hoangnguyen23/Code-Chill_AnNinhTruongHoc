@@ -37,8 +37,6 @@ void main() {
         AppRoutes.queue,
         AppRoutes.assigned,
         AppRoutes.dashboard,
-        AppRoutes.zaloTest,
-        AppRoutes.sendLogs,
         AppRoutes.map,
         AppRoutes.broadcasts,
       ]) {
@@ -51,14 +49,13 @@ void main() {
     test('bảo vệ không vào màn quản trị', () {
       expect(canAccess(UserRole.guard, AppRoutes.queue), isTrue);
       expect(canAccess(UserRole.guard, AppRoutes.users), isFalse);
-      expect(canAccess(UserRole.guard, AppRoutes.zaloTest), isFalse);
+      expect(canAccess(UserRole.guard, AppRoutes.campusConfig), isFalse);
       expect(canAccess(UserRole.guard, AppRoutes.home), isFalse);
       expect(canAccess(UserRole.guard, AppRoutes.map), isTrue);
       expect(canAccess(UserRole.guard, AppRoutes.broadcasts), isFalse);
     });
-    test('chỉ quản trị gửi thử Zalo và xem nhật ký', () {
-      expect(canAccess(UserRole.admin, AppRoutes.zaloTest), isTrue);
-      expect(canAccess(UserRole.admin, AppRoutes.sendLogs), isTrue);
+    test('chỉ quản trị vào màn quản lý', () {
+      expect(canAccess(UserRole.admin, AppRoutes.campusConfig), isTrue);
       expect(canAccess(UserRole.admin, AppRoutes.broadcasts), isTrue);
       expect(canAccess(UserRole.admin, AppRoutes.assigned), isFalse);
     });
@@ -83,9 +80,9 @@ void main() {
       expect(resolveRedirect(SessionReady(user(UserRole.admin)), AppRoutes.profileSetup), AppRoutes.dashboard);
     });
     test('vào màn không đúng quyền thì bị đưa về trang chủ', () {
-      expect(resolveRedirect(SessionReady(user(UserRole.reporter)), AppRoutes.zaloTest), AppRoutes.home);
+      expect(resolveRedirect(SessionReady(user(UserRole.reporter)), AppRoutes.campusConfig), AppRoutes.home);
       expect(resolveRedirect(SessionReady(user(UserRole.guard)), AppRoutes.dashboard), AppRoutes.queue);
-      expect(resolveRedirect(SessionReady(user(UserRole.admin)), AppRoutes.zaloTest), isNull);
+      expect(resolveRedirect(SessionReady(user(UserRole.admin)), AppRoutes.campusConfig), isNull);
     });
     test('tài khoản bị khoá', () {
       expect(resolveRedirect(const SessionBlocked('Tài khoản đã bị khoá.'), AppRoutes.home), AppRoutes.blocked);

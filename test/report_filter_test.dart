@@ -113,20 +113,9 @@ void main() {
   test('SubmitReportResult đọc phản hồi backend', () {
     final r = SubmitReportResult.fromJson({
       'report': {'id': 'r1', 'code': 'SC-261019-K7Q4'},
-      'notifications': {
-        'reporterConfirmation': {'success': false, 'message': 'Số này chưa có tài khoản Zalo', 'errorCode': -118},
-        'guardsTotal': 3,
-        'guardsAlerted': 2,
-        'guardFailures': [
-          {'recipient': '84933***555', 'message': 'Template chưa được Zalo duyệt'},
-        ],
-        'pending': false,
-      },
+      'notifications': {'pushDelivered': 3},
     });
     expect(r.code, 'SC-261019-K7Q4');
-    expect(r.reporterConfirmation!.success, isFalse);
-    expect(r.reporterConfirmation!.errorCode, -118);
-    expect(r.guardsAlerted, 2);
-    expect(r.guardFailureMessages.single, contains('84933***555'));
+    expect(r.pushDelivered, 3);
   });
 }

@@ -8,9 +8,6 @@ Future<Response> onRequest(RequestContext context, String id) async {
   final user = context.read<UserRecord>();
   final body = await readJsonObject(context.request);
   final target = requireString(body, 'assigneeUid', label: 'người nhận việc', maxLength: 128);
-  final (report, zalo) = await services.reportService.assign(user, id, target);
-  return Response.json(body: {
-    'report': report.toApiJson(),
-    'reporterNotification': zalo?.toJson(),
-  });
+  final report = await services.reportService.assign(user, id, target);
+  return Response.json(body: {'report': report.toApiJson()});
 }

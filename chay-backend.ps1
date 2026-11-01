@@ -1,4 +1,4 @@
-﻿# Chạy backend trên laptop này. Dữ liệu dùng chung với các laptop khác qua Firestore (cloud).
+﻿# Chạy backend trên laptop này để thử khi sửa code. Dữ liệu nằm trên MongoDB Atlas.
 # Cách dùng: chuột phải file này > "Run with PowerShell", hoặc trong PowerShell:
 #   powershell -ExecutionPolicy Bypass -File .\chay-backend.ps1
 # Giữ cửa sổ này mở trong suốt buổi báo cáo; đóng cửa sổ là tắt backend.
@@ -34,13 +34,29 @@ foreach ($f in '.env', 'service-account.json') {
     if (-not (Test-Path $f)) { throw "Thiếu backend\$f. Xin file này từ trưởng nhóm rồi chạy lại." }
 }
 
-# ---- Build backend lần đầu (hoặc khi chưa có) ----
-if (-not (Test-Path 'build\bin\server.dart')) {
+# ---- Cổng 8080 đang bận thì báo rõ thay vì lỗi khó hiểu ----
+$busy = Get-NetTCPConnection -LocalPort 8080 -State Listen -ErrorAction SilentlyContinue
+if ($busy) {
+    Write-Host 'Cổng 8080 đang được dùng: có thể backend đã chạy ở một cửa sổ khác. Đóng cửa sổ đó rồi chạy lại.' -ForegroundColor Yellow
+    Read-Host 'Nhấn Enter để thoát'
+    exit 1
+}
+
+# ---- Build khi chưa có bản build, hoặc khi source mới hơn bản build ----
+function Test-NeedBuild {
+    $built = 'build\bin\server.dart'
+    if (-not (Test-Path $built)) { return $true }
+    $builtAt = (Get-Item $built).LastWriteTime
+    $sources = Get-ChildItem -Recurse -File 'lib', 'routes', '..\packages\campus_core\lib', 'main.dart', 'pubspec.yaml'
+    return [bool]($sources | Where-Object { $_.LastWriteTime -gt $builtAt } | Select-Object -First 1)
+}
+
+if (Test-NeedBuild) {
     if (-not (Get-Command dart_frog -ErrorAction SilentlyContinue)) {
         Write-Host 'Đang cài dart_frog_cli...'
         dart pub global activate dart_frog_cli
     }
-    Write-Host 'Đang tải thư viện và build backend lần đầu (vài phút)...'
+    Write-Host 'Đang tải thư viện và build backend (vài phút, đừng đóng cửa sổ)...'
     dart pub get
     dart_frog build
     Push-Location build; dart pub get; Pop-Location

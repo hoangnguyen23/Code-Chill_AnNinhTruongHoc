@@ -139,7 +139,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               subtitle: Text([
                 if (campus != null && campus.campusName.isNotEmpty) campus.campusName,
                 'Đăng nhập bằng tên đăng nhập và mật khẩu; mã xác nhận gửi qua email',
-                if (campus?.isZaloEnabled ?? false) 'Tin nhắn qua Zalo Official Account của trường',
               ].join('\n')),
             ),
           ),

@@ -116,7 +116,7 @@ void main() {
       overrides: [
         authRepositoryProvider.overrideWithValue(repo),
         campusInfoProvider.overrideWith(
-          (ref) async => const CampusInfo(campusName: 'Trường thử nghiệm', hotline: null, buildings: [], zaloMode: 'off'),
+          (ref) async => const CampusInfo(campusName: 'Trường thử nghiệm', hotline: null, buildings: []),
         ),
       ],
       child: MaterialApp.router(

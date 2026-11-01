@@ -53,6 +53,7 @@ class BroadcastRecord {
         'createdAt': createdAt.toUtc().toIso8601String(),
         'expiresAt': expiresAt.toUtc().toIso8601String(),
         'active': active,
+        'createdByName': createdByName,
       };
 }
 
@@ -64,6 +65,9 @@ abstract interface class BroadcastRepository {
   Future<BroadcastRecord?> byId(String id);
 
   Future<void> end(String id, DateTime at);
+
+  /// Cảnh báo gần nhất (kể cả đã gỡ), mới nhất trước.
+  Future<List<BroadcastRecord>> recent({required int limit});
 }
 
 /// Giới hạn nội dung cảnh báo.
@@ -87,7 +91,10 @@ class BroadcastService {
   final NotificationService _notifications;
   final DateTime Function() _clock;
 
-  /// Quản trị gửi cảnh báo: lưu Firestore (banner trong app) và push tới mọi tài khoản.
+  /// Cảnh báo gần nhất để app hiện banner và lịch sử.
+  Future<List<BroadcastRecord>> recent() => _broadcasts.recent(limit: 20);
+
+  /// Quản trị gửi cảnh báo: lưu CSDL (banner trong app) và push tới mọi tài khoản.
   /// Trả về (cảnh báo, số thiết bị nhận push).
   Future<(BroadcastRecord, int)> send(
     UserRecord admin, {

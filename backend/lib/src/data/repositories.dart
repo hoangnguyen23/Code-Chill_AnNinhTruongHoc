@@ -8,7 +8,7 @@ abstract interface class UserRepository {
   Future<UserRecord?> byEmail(EmailAddress email);
 
   /// Tìm theo email; nếu chưa có thì tạo mới với [role]. Trả về (người dùng, mới tạo?).
-  /// Đảm bảo mỗi email chỉ có một tài khoản (dùng `email_index/{email}`).
+  /// Đảm bảo mỗi email chỉ có một tài khoản (chỉ mục unique trên `email`).
   Future<(UserRecord, bool)> getOrCreate(EmailAddress email, {required UserRole role});
 
   /// Tạo trước tài khoản (quản trị). Ném [StateError] nếu email đã tồn tại.
@@ -44,11 +44,14 @@ abstract interface class UserRepository {
   /// Mọi tài khoản đang hoạt động (gửi cảnh báo toàn trường).
   Future<List<UserRecord>> listActive();
 
-  /// Xoá hồ sơ, chỉ mục email và danh sách "báo cáo của tôi". Báo cáo đã gửi vẫn giữ để tra cứu.
+  /// Tài khoản theo vai trò, kể cả đang bị khoá (màn quản lý của quản trị).
+  Future<List<UserRecord>> listByRoles(Set<UserRole> roles);
+
+  /// Xoá hồ sơ. Báo cáo đã gửi vẫn giữ để tra cứu.
   Future<void> delete(String uid);
 }
 
-/// Tên đăng nhập và mật khẩu đã băm (`credentials/{uid}`, client không đọc được).
+/// Tên đăng nhập và mật khẩu đã băm (collection `credentials`, API không bao giờ trả về).
 class StoredCredential {
   const StoredCredential({
     required this.uid,
@@ -91,22 +94,35 @@ abstract interface class ReportRepository {
   /// Sinh ID cho báo cáo mới.
   String newId();
 
-  /// Ghi báo cáo, thông tin người báo, chỉ mục "báo cáo của tôi" và sự kiện "created" trong
-  /// một transaction.
+  /// Ghi báo cáo cùng thông tin người báo và sự kiện "created" (một tài liệu, nguyên tử).
   Future<void> create(ReportRecord report, ReporterPrivate reporter, ReportEvent createdEvent);
 
   Future<ReportRecord?> byId(String id);
 
   Future<ReporterPrivate?> reporterOf(String id);
 
-  /// Đọc báo cáo và người báo trong transaction, gọi [apply] để tính bản mới (có thể ném lỗi
-  /// để huỷ), rồi ghi báo cáo, chỉ mục của người báo và [event] (nếu có).
+  /// Đọc báo cáo và người báo, gọi [apply] để tính bản mới (có thể ném lỗi để huỷ), rồi ghi báo
+  /// cáo và [event] (nếu có). Có người ghi chen vào thì đọc lại và gọi lại [apply].
   Future<(ReportRecord, ReporterPrivate)> mutate(
     String id,
     (ReportRecord, ReportEvent?) Function(ReportRecord current, ReporterPrivate reporter) apply,
   );
 
   Future<void> addEvent(String reportId, ReportEvent event);
+
+  /// Lịch sử xử lý và trao đổi, cũ nhất trước.
+  Future<List<ReportEvent>> eventsOf(String id);
+
+  /// Báo cáo chưa đóng, mới nhất trước.
+  Future<List<ReportRecord>> listOpen({required int limit});
+
+  /// Báo cáo tạo từ [from] tới nay, mới nhất trước.
+  Future<List<ReportRecord>> listSince(DateTime from, {required int limit});
+
+  Future<List<ReportRecord>> listAssignedTo(String uid, {required int limit});
+
+  /// Báo cáo của chính người này, kể cả báo cáo ẩn danh.
+  Future<List<ReportRecord>> listByReporter(String uid, {required int limit});
 }
 
 abstract interface class OtpStore {

@@ -5,7 +5,7 @@ import 'package:campus_safety_backend/backend.dart';
 import 'package:dart_frog/dart_frog.dart';
 
 /// POST /images {data: `JPEG base64`} : tải ảnh sự cố lên (cần đăng nhập), trả `{path}` để gắn vào
-/// báo cáo. Ảnh lưu trong Firestore nên mọi backend đều đọc được.
+/// báo cáo. Ảnh lưu trong MongoDB.
 Future<Response> onRequest(RequestContext context) async {
   ensureMethod(context, {HttpMethod.post});
   return await requireAuth()(_upload)(context);
@@ -14,11 +14,8 @@ Future<Response> onRequest(RequestContext context) async {
 Future<Response> _upload(RequestContext context) async {
   final services = context.read<AppServices>();
   services.limits.check(services.limits.images, context.read<UserRecord>().uid, 'tải ảnh');
-  final raw = await context.request.body();
   // Ảnh tối đa 700 KB, base64 khoảng 940 KB: cho phép body tới 1,2 MB.
-  if (raw.length > 1200 * 1024) {
-    throw ApiException(HttpStatus.requestEntityTooLarge, 'payload_too_large', 'Ảnh quá lớn.');
-  }
+  final raw = await readBody(context.request, maxBytes: 1200 * 1024, tooLarge: 'Ảnh quá lớn.');
   final Object? json;
   try {
     json = jsonDecode(raw);

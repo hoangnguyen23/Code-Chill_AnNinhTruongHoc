@@ -1,7 +1,7 @@
 /// Giới hạn số lần thao tác theo khoá (IP) trong cửa sổ trượt, lưu trong bộ nhớ tiến trình.
 ///
 /// Đủ cho một instance backend. Khi chạy nhiều instance (Cloud Run scale), giới hạn theo số
-/// điện thoại vẫn chính xác vì được lưu ở Firestore; giới hạn theo IP là lớp chặn bổ sung.
+/// email vẫn chính xác vì được lưu trong CSDL; giới hạn theo IP là lớp chặn bổ sung.
 class SlidingWindowRateLimiter {
   SlidingWindowRateLimiter({
     required this.maxEvents,

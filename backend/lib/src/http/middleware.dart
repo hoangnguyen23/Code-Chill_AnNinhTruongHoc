@@ -45,6 +45,13 @@ Middleware requireAuth({Set<UserRole>? roles}) {
         uid = await services.authTokens.verifyIdToken(header.substring(7).trim());
       } on InvalidIdTokenException {
         throw ApiException.unauthorized();
+      } on AuthUnavailableException catch (e) {
+        stderr.writeln('[auth] Không kiểm tra được phiên đăng nhập: $e');
+        throw ApiException(
+          HttpStatus.serviceUnavailable,
+          'auth_unavailable',
+          'Máy chủ tạm thời không kiểm tra được phiên đăng nhập. Kiểm tra Internet của máy chạy backend rồi thử lại.',
+        );
       }
       final user = await services.users.byId(uid);
       if (user == null) {

@@ -59,7 +59,6 @@ void main() {
             campusName: 'Trường thử nghiệm',
             hotline: '0243 868 1234',
             buildings: ['Toà A1', 'Bãi xe'],
-            zaloMode: 'production',
           ),
         ),
         reportRepositoryProvider.overrideWithValue(repo),

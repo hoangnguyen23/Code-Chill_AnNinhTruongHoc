@@ -9,7 +9,6 @@ Future<Response> onRequest(RequestContext context) async {
   final campus = await services.currentCampusConfig();
   return Response.json(body: {
     ...campus.toJson(),
-    'zaloMode': services.gateway.mode,
     'otpMode': services.accounts.otpMode,
   });
 }
